@@ -12,14 +12,12 @@ func Test_createMatchup(t *testing.T) {
 		{"ZvP", ZvP},
 		{"ZvT", ZvT},
 		{"ZvZ", ZvZ},
-		{"zvz", NIL},
-		{"", NIL},
 	}
 
 	for _, test := range tests {
-		if got := createMatchup(&test.input); got != test.want {
+		if setMatchup(&test.input); matchup != test.want {
 			t.Errorf("want: %v\n", test.want)
-			t.Errorf(" got: %v\n\n", got)
+			t.Errorf(" got: %v\n\n", matchup)
 		}
 	}
 }

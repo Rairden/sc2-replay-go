@@ -7,24 +7,23 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 )
 
 var (
-	regex = regexp.MustCompile("^(Gixxasaurus|Rairden)$")
-	dir   = "/home/erik/scratch/replays2/"
-	// regex2  = regexp.MustCompile("^(1331332|4545534)$")
-	// dir2    = "/run/media/erik/storage/SC2/replayBackup/"
+	regex   = regexp.MustCompile("^(Gixxasaurus|Rairden)$")
+	dir     = "/home/erik/scratch/replays2/"
 	player  = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}}
 	matchup = NIL
 )
 
 const (
-	ZvP = uint8(iota)
+	NIL = uint8(iota)
+	ZvP
 	ZvT
 	ZvZ
-	NIL
 )
 
 type Player struct {
@@ -36,9 +35,8 @@ type Player struct {
 func main() {
 	files, _ := ioutil.ReadDir(dir)
 	fileCnt := numFiles(files)
-	player.updateScore(files)
+	player.updateAllScores(files)
 
-	debugPrint()
 	saveAllFiles()
 
 	for {
@@ -50,121 +48,60 @@ func main() {
 		}
 
 		fileCnt = numFiles(files)
-		player.updateScore(files)
+		lastModified := getLastModified(dir)
+		player.updateScore(lastModified)
 
-		var stringToWrite string
-		switch matchup {
-		case ZvP:
-			stringToWrite = matchupToString(&player.ZvP)
-		case ZvT:
-			stringToWrite = matchupToString(&player.ZvT)
-		case ZvZ:
-			stringToWrite = matchupToString(&player.ZvZ)
-		}
-
-		saveFile(stringToWrite)
-		debugPrint()
+		saveFile()
 	}
 }
 
-func (p *Player) resetScores() {
-	p.ZvP[0] = 0
-	p.ZvP[1] = 0
-	p.ZvT[0] = 0
-	p.ZvT[1] = 0
-	p.ZvZ[0] = 0
-	p.ZvZ[1] = 0
-}
-
-func (p *Player) updateScore(files []os.FileInfo) {
-	p.resetScores()
-
+func (p *Player) updateAllScores(files []os.FileInfo) {
 	for _, file := range files {
-		r, err := rep.NewFromFileEvts(dir+file.Name(), false, false, false)
-
-		if err != nil {
-			fmt.Printf("Failed to open file: '%v'\n", err)
-			return
-		}
-		defer r.Close()
-
-		matchup := r.Details.Matchup()
-		players := r.Details.Players()
-
-		mu := createMatchup(&matchup)
-
-		if players[0].Result().Name == "Victory" {
-			player.SetScore(mu, &players[0].Name)
-		} else {
-			player.SetScore(mu, &players[1].Name)
-		}
+		p.updateScore(file)
 	}
 }
 
-func saveFile(str string) {
-	currDir, _ := os.Getwd()
-	pwd := currDir + filepath.Join("/")
+func (p *Player) updateScore(file os.FileInfo) {
+	r, err := rep.NewFromFileEvts(dir + file.Name(), false, false, false)
 
-	var ZvX string
+	if err != nil {
+		fmt.Printf("Failed to open file: '%v'\n", err)
+		return
+	}
+
+	defer r.Close()
+	parseReplay(r)
+}
+
+func parseReplay(r *rep.Rep) {
+	matchup := r.Details.Matchup()
+	players := r.Details.Players()
+
+	setMatchup(&matchup)
+
+	if players[0].Result().Name == "Victory" {
+		player.SetScore(&players[0].Name)
+	} else {
+		player.SetScore(&players[1].Name)
+	}
+}
+
+func setMatchup(mu *string) {
+	if *mu == "PvZ" || *mu == "ZvP" {
+		matchup = ZvP
+		return
+	}
+	if *mu == "TvZ" || *mu == "ZvT" {
+		matchup = ZvT
+		return
+	}
+	if *mu == "ZvZ" {
+		matchup = ZvZ
+	}
+}
+
+func (p *Player) SetScore(name *string) {
 	switch matchup {
-	case ZvP:
-		ZvX = "ZvP.txt"
-	case ZvT:
-		ZvX = "ZvT.txt"
-	case ZvZ:
-		ZvX = "ZvZ.txt"
-	}
-	fmt.Printf("file = %v\n", ZvX)
-
-	file, e1 := os.Create(pwd + ZvX)
-	check(e1)
-	defer file.Close()
-
-	_, e2 := file.WriteString(str)
-	check(e2)
-	file.Sync()
-}
-
-func saveAllFiles() {
-	currDir, _ := os.Getwd()
-	pwd := currDir + filepath.Join("/")
-
-	ZvP_txt, e1 := os.Create(pwd + "ZvP.txt")
-	ZvT_txt, e2 := os.Create(pwd + "ZvT.txt")
-	ZvZ_txt, e3 := os.Create(pwd + "ZvZ.txt")
-
-	check(e1)
-	check(e2)
-	check(e3)
-
-	defer ZvP_txt.Close()
-	defer ZvT_txt.Close()
-	defer ZvZ_txt.Close()
-
-	ZvP_txt.WriteString(matchupToString(&player.ZvP))
-	ZvT_txt.WriteString(matchupToString(&player.ZvT))
-	ZvZ_txt.WriteString(matchupToString(&player.ZvZ))
-
-	ZvP_txt.Sync()
-	ZvT_txt.Sync()
-	ZvZ_txt.Sync()
-}
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
-func matchupToString(ZvX *[2]uint8) string {
-	win := strconv.Itoa(int(ZvX[0]))
-	loss := strconv.Itoa(int(ZvX[1]))
-	str := fmt.Sprintf("%2s - %s\n", win, loss)
-	return str
-}
-
-func (p *Player) SetScore(mu uint8, name *string) {
-	switch mu {
 	case ZvP:
 		incScore(name, &p.ZvP)
 	case ZvT:
@@ -182,25 +119,60 @@ func incScore(name *string, ZvX *[2]uint8) {
 	}
 }
 
-func createMatchup(mu *string) uint8 {
-	if *mu == "PvZ" || *mu == "ZvP" {
-		return ZvP
+func saveFile() {
+	currDir, _ := os.Getwd()
+	pwd := currDir + filepath.Join("/")
+
+	switch matchup {
+	case ZvP:
+		writeFile(pwd + "ZvP.txt", &player.ZvP)
+	case ZvT:
+		writeFile(pwd + "ZvT.txt", &player.ZvT)
+	case ZvZ:
+		writeFile(pwd + "ZvZ.txt", &player.ZvZ)
 	}
-	if *mu == "TvZ" || *mu == "ZvT" {
-		return ZvT
-	}
-	if *mu == "ZvZ" {
-		return ZvZ
-	}
-	return NIL
+}
+
+func saveAllFiles() {
+	currDir, _ := os.Getwd()
+	pwd := currDir + filepath.Join("/")
+
+	writeFile(pwd + "ZvP.txt", &player.ZvP)
+	writeFile(pwd + "ZvT.txt", &player.ZvT)
+	writeFile(pwd + "ZvZ.txt", &player.ZvZ)
+}
+
+func writeFile(fullPath string, mu *[2]uint8) {
+	file, e := os.Create(fullPath)
+	check(e)
+	defer file.Close()
+	file.WriteString(matchupToString(mu))
+	file.Sync()
+}
+
+func matchupToString(ZvX *[2]uint8) string {
+	win := strconv.Itoa(int(ZvX[0]))
+	loss := strconv.Itoa(int(ZvX[1]))
+	str := fmt.Sprintf("%2s - %s\n", win, loss)
+	return str
+}
+
+func getLastModified(path string) os.FileInfo {
+	files, _ := ioutil.ReadDir(path)
+
+	sort.Slice(files, func(i, j int) bool {
+		return files[j].ModTime().Before(files[i].ModTime())
+	})
+
+	return files[0]
 }
 
 func numFiles(files []os.FileInfo) int {
 	return len(files)
 }
 
-func debugPrint() {
-	fmt.Println(player.ZvP)
-	fmt.Println(player.ZvT)
-	fmt.Println(player.ZvZ)
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
 }
