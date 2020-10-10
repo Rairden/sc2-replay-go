@@ -5,16 +5,14 @@ import (
 	"github.com/icza/s2prot/rep"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"time"
 )
 
 var (
-	regex   = regexp.MustCompile("^(Gixxasaurus|Rairden)$")
-	dir     = "/home/erik/scratch/replays2/"
+	dir string
+	names []string
 	player  = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}}
 	matchup = NIL
 )
@@ -33,11 +31,13 @@ type Player struct {
 }
 
 func main() {
+	dir = cfg.dir
+	names = cfg.names
 	files, _ := ioutil.ReadDir(dir)
-	fileCnt := numFiles(files)
 	player.updateAllScores(files)
-
 	saveAllFiles()
+
+	fileCnt := numFiles(files)
 
 	for {
 		time.Sleep(1 * time.Second)
@@ -112,7 +112,15 @@ func (p *Player) SetScore(name *string) {
 }
 
 func incScore(name *string, ZvX *[2]uint8) {
-	if regex.MatchString(*name) {
+	var match bool
+	for _, toon := range names {
+		if *name == toon {
+			match = true
+			break
+		}
+	}
+
+	if match {
 		ZvX[0]++
 	} else {
 		ZvX[1]++
@@ -120,26 +128,20 @@ func incScore(name *string, ZvX *[2]uint8) {
 }
 
 func saveFile() {
-	currDir, _ := os.Getwd()
-	pwd := currDir + filepath.Join("/")
-
 	switch matchup {
 	case ZvP:
-		writeFile(pwd + "ZvP.txt", &player.ZvP)
+		writeFile(currDir + "ZvP.txt", &player.ZvP)
 	case ZvT:
-		writeFile(pwd + "ZvT.txt", &player.ZvT)
+		writeFile(currDir + "ZvT.txt", &player.ZvT)
 	case ZvZ:
-		writeFile(pwd + "ZvZ.txt", &player.ZvZ)
+		writeFile(currDir + "ZvZ.txt", &player.ZvZ)
 	}
 }
 
 func saveAllFiles() {
-	currDir, _ := os.Getwd()
-	pwd := currDir + filepath.Join("/")
-
-	writeFile(pwd + "ZvP.txt", &player.ZvP)
-	writeFile(pwd + "ZvT.txt", &player.ZvT)
-	writeFile(pwd + "ZvZ.txt", &player.ZvZ)
+	writeFile(currDir + "ZvP.txt", &player.ZvP)
+	writeFile(currDir + "ZvT.txt", &player.ZvT)
+	writeFile(currDir + "ZvZ.txt", &player.ZvZ)
 }
 
 func writeFile(fullPath string, mu *[2]uint8) {
