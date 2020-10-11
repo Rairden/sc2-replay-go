@@ -16,6 +16,8 @@ Two to three of my first placement matches had that -36400 MMR.
 |                | Gixxasaurus |        |
 | ZvZ Rairden    | Rairden     | 3059   |
 |                | Brubbster   | 3061   |
+| ZvT vapit      | Rairden     | 3049   |
+|                | vapit       | 3068   |
 | ZvT tobe       | tobe        | 3315   |
 |                | Rairden     | 3059   |
 

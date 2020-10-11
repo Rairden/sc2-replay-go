@@ -50,4 +50,3 @@ func BenchmarkMain(b *testing.B) {
 		main()
 	}
 }
-

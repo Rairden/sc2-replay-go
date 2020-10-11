@@ -28,20 +28,14 @@ func init() {
 		toons := config.Get("account.name").([]interface{})
 		dir := config.Get("directory.dir").(string)
 
-		x := make([]string, len(toons))
+		names := make([]string, len(toons))
 		for i := range toons {
-			x[i] = toons[i].(string)
+			names[i] = toons[i].(string)
 		}
-		cfg = settings{x, dir}
+		cfg = settings{names, dir}
 
 	} else {
-		f, err := os.Create(currDir + "cfg.toml")
-		check(err)
-		defer f.Close()
-
-		f.WriteString(config)
-		f.Sync()
-
+		writeData(currDir + "cfg.toml", config)
 		fmt.Println("Now setup your cfg.toml file.")
 		os.Exit(0)
 	}
