@@ -12,7 +12,7 @@ func (p *Player) setMMR(r *rep.Rep) float64 {
 	players := r.Details.Players()
 	metadata := r.Metadata.Players()
 
-	if checkIfPlayer(&players[0].Name) {
+	if isPlayer(&players[0].Name) {
 		mmr := metadata[0].Value("MMR")
 		if p.isInvalidMMR(mmr) {
 			return 0
@@ -37,10 +37,18 @@ func (p *Player) isInvalidMMR(mmr interface{}) bool {
 	return false
 }
 
+func writeData(fullPath string, data string) {
+	file, e := os.Create(fullPath)
+	check(e)
+	defer file.Close()
+	file.WriteString(data)
+	file.Sync()
+}
+
 func (p *Player) writeMMRdiff() {
 	files, _ := ioutil.ReadDir(dir)
 	if p.startMMR == 0 || numFiles(files) == 1 {
-		writeData(currDir + "MMR-diff.txt", "+0 MMR\n")
+		writeData(MMRdiff_txt, "+0 MMR\n")
 		return
 	}
 
@@ -48,18 +56,18 @@ func (p *Player) writeMMRdiff() {
 	diff := p.startMMR - p.MMR
 
 	if diff <= 0 {
-		diff *= -1
+		diff = math.Abs(diff)
 		result = fmt.Sprintf("+%.f MMR\n", diff)
 	} else {
 		result = fmt.Sprintf("-%.f MMR\n", diff)
 	}
-	writeData(currDir + "MMR-diff.txt", result)
+	writeData(MMRdiff_txt, result)
 }
 
 func (p *Player) writeWinRate() {
-	wr := float64(p.getWonGames()) / float64(p.getTotalGames()) * 100
+	wr := float64(p.getWins()) / float64(p.getTotalGames()) * 100
 	winrate := fmt.Sprintf("%.f%%\n", math.Round(wr))
-	writeData(currDir + "winrate.txt", winrate)
+	writeData(winrate_txt, winrate)
 }
 
 func (p *Player) getTotalGames() uint8 {
@@ -69,17 +77,9 @@ func (p *Player) getTotalGames() uint8 {
 	return x + y + z
 }
 
-func (p *Player) getWonGames() uint8 {
+func (p *Player) getWins() uint8 {
 	x := p.ZvP[0]
 	y := p.ZvT[0]
 	z := p.ZvZ[0]
 	return x + y + z
-}
-
-func writeData(fullPath string, data string) {
-	file, e := os.Create(fullPath)
-	check(e)
-	defer file.Close()
-	file.WriteString(data)
-	file.Sync()
 }

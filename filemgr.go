@@ -5,15 +5,22 @@ import (
 	"github.com/pelletier/go-toml"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 )
 
 var (
-	_, s, _, _ = runtime.Caller(0)
-	currDir    = filepath.Dir(s) + filepath.Join("/")
-
-	cfg settings
+	_, r, _, _  = runtime.Caller(0) // linux (testing)
+	s, _        = os.Executable()   // win10
+	currDir     = path.Dir(s) + filepath.Join("/")
+	cfg_toml    = currDir + "cfg.toml"
+	ZvP_txt     = currDir + "ZvP.txt"
+	ZvT_txt     = currDir + "ZvT.txt"
+	ZvZ_txt     = currDir + "ZvZ.txt"
+	MMRdiff_txt = currDir + "MMR-diff.txt"
+	winrate_txt = currDir + "winrate.txt"
+	cfg         settings
 )
 
 // the cfg.toml file
@@ -32,19 +39,18 @@ func init() {
 		for i := range toons {
 			names[i] = toons[i].(string)
 		}
+
 		cfg = settings{names, dir}
 
 	} else {
-		writeData(currDir + "cfg.toml", config)
+		writeData(cfg_toml, config)
 		fmt.Println("Now setup your cfg.toml file.")
 		os.Exit(0)
 	}
 }
 
 func cfgExists() bool {
-	cfg := currDir + filepath.Join("cfg.toml")
-	fmt.Printf("    cfg: %v\n", cfg)
-	_, err := os.Open(cfg)
+	_, err := os.Open(cfg_toml)
 
 	if err != nil {
 		return false
@@ -54,15 +60,12 @@ func cfgExists() bool {
 }
 
 func cfgToString() string {
-	fmt.Printf("currDir: %v\n", currDir)
-	b, err := ioutil.ReadFile(currDir + "cfg.toml")
+	b, err := ioutil.ReadFile(cfg_toml)
 
 	if err != nil {
 		fmt.Printf("File not found: '%v'", b)
 	}
-
-	str := string(b)
-	return str
+	return string(b)
 }
 
 var config = `# name - Put a comma-separated list of your SC2 player names. ID not required.
@@ -70,7 +73,9 @@ var config = `# name - Put a comma-separated list of your SC2 player names. ID n
 name = [ "Gixxasaurus", "Rairden" ]
 ID = [ 1331332, 4545534 ]
 
-# dir - Where to watch for new SC2 replays
+# dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 [directory]
-dir = "/home/erik/scratch/replays/"
+#dir = "/home/erik/scratch/replays/"
+#dir = "C:/Users/Erik/Downloads/reps/"
+dir = "C:\\Users\\Erik\\Downloads\\reps\\"
 `

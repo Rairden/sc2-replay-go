@@ -25,20 +25,18 @@ const (
 )
 
 type Player struct {
-	ZvP      [2]uint8
-	ZvT      [2]uint8
-	ZvZ      [2]uint8
-	startMMR float64
-	MMR      float64
+	ZvP, ZvT, ZvZ [2]uint8
+	startMMR, MMR float64
 }
 
 func main() {
 	dir = cfg.dir
 	names = cfg.names
+	fmt.Printf("Checking the directory '%v' every 5 seconds for new SC2 replays...\n", dir)
 	files, _ := ioutil.ReadDir(dir)
 
 	// set start MMR and current MMR (if starting w/ non-empty folder)
-	if len(files) > 1 {
+	if len(files) >= 1 {
 		oldestFile := getLeastModified(dir)
 		newestFile := getLastModified(dir)
 		firstRep := decodeReplay(oldestFile)
@@ -50,15 +48,16 @@ func main() {
 		player.updateAllScores(files)
 		player.writeMMRdiff()
 		player.writeWinRate()
-		saveAllFiles(true)
+		saveAllFiles()
 	} else {
-		saveAllFiles(false)
+		saveAllFiles()
+		saveResetMMR()
 	}
 
 	fileCnt := numFiles(files)
 
 	for {
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 
 		if fileCnt == numFiles(files) {
 			files, _ = ioutil.ReadDir(dir)
@@ -66,30 +65,30 @@ func main() {
 		}
 
 		fileCnt = numFiles(files)
-		lastModified := getLastModified(dir)
 
-		if numFiles(files) == 0 || lastModified == nil {
-			player.resetScores()
-			saveAllFiles(false)
+		if numFiles(files) == 0 {
+			player = Player{}
+			saveAllFiles()
+			saveResetMMR()
 			continue
 		}
 
+		lastModified := getLastModified(dir)
 		player.parseReplay(lastModified)
 		replay := decodeReplay(lastModified)
-		player.setMMR(replay)
-		saveFile()
+		mmr := player.setMMR(replay)
+		player.writeMMRdiff()
 		player.writeWinRate()
+		saveFile()
 
-		if numFiles(files) == 1 {
-			mmr := player.setMMR(replay)
+		if numFiles(files) == 1 || player.startMMR == 0 {
 			player.startMMR = mmr
 		}
-		player.writeMMRdiff()
 	}
 }
 
 func decodeReplay(file os.FileInfo) *rep.Rep {
-	r, err := rep.NewFromFileEvts(dir + file.Name(), false, false, false)
+	r, err := rep.NewFromFileEvts(dir+file.Name(), false, false, false)
 	check(err)
 	defer r.Close()
 	return r
@@ -145,7 +144,7 @@ func (p *Player) SetScore(name *string) {
 }
 
 func incScore(name *string, ZvX *[2]uint8) {
-	isPlayer := checkIfPlayer(name)
+	isPlayer := isPlayer(name)
 
 	if isPlayer {
 		ZvX[0]++
@@ -154,7 +153,7 @@ func incScore(name *string, ZvX *[2]uint8) {
 	}
 }
 
-func checkIfPlayer(name *string) bool {
+func isPlayer(name *string) bool {
 	var match bool
 	for _, toon := range names {
 		if *name == toon {
@@ -168,23 +167,23 @@ func checkIfPlayer(name *string) bool {
 func saveFile() {
 	switch matchup {
 	case ZvP:
-		writeFile(currDir + "ZvP.txt", &player.ZvP)
+		writeFile(ZvP_txt, &player.ZvP)
 	case ZvT:
-		writeFile(currDir + "ZvT.txt", &player.ZvT)
+		writeFile(ZvT_txt, &player.ZvT)
 	case ZvZ:
-		writeFile(currDir + "ZvZ.txt", &player.ZvZ)
+		writeFile(ZvZ_txt, &player.ZvZ)
 	}
 }
 
-func saveAllFiles(skipMMR bool) {
-	writeFile(currDir + "ZvP.txt", &player.ZvP)
-	writeFile(currDir + "ZvT.txt", &player.ZvT)
-	writeFile(currDir + "ZvZ.txt", &player.ZvZ)
+func saveAllFiles() {
+	writeFile(ZvP_txt, &player.ZvP)
+	writeFile(ZvT_txt, &player.ZvT)
+	writeFile(ZvZ_txt, &player.ZvZ)
+}
 
-	if !skipMMR {
-		writeData(currDir + "MMR-diff.txt", "+0 MMR\n")
-		writeData(currDir + "winrate.txt", "0%\n")
-	}
+func saveResetMMR() {
+	writeData(MMRdiff_txt, "+0 MMR\n")
+	writeData(winrate_txt, "0%\n")
 }
 
 func writeFile(fullPath string, mu *[2]uint8) {
@@ -200,10 +199,6 @@ func matchupToString(ZvX *[2]uint8) string {
 
 func getLastModified(path string) os.FileInfo {
 	files, _ := ioutil.ReadDir(path)
-
-	if len(files) == 0 {
-		return nil
-	}
 
 	sort.Slice(files, func(i, j int) bool {
 		return files[j].ModTime().Before(files[i].ModTime())
@@ -222,18 +217,6 @@ func getLeastModified(path string) os.FileInfo {
 
 func numFiles(files []os.FileInfo) int {
 	return len(files)
-}
-
-func (p *Player) resetScores() {
-	p.MMR = 0
-	p.startMMR = 0
-
-	p.ZvP[0] = 0
-	p.ZvT[0] = 0
-	p.ZvZ[0] = 0
-	p.ZvP[1] = 0
-	p.ZvT[1] = 0
-	p.ZvZ[1] = 0
 }
 
 func check(e error) {
