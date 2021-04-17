@@ -11,10 +11,11 @@ import (
 )
 
 var (
-	dir     string
-	names   []string
-	player  = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, 0, 0}
-	matchup = NIL
+	dir          string
+	names        []string
+	player       = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, 0, 0}
+	matchup      = NIL
+	milliseconds = 1000
 )
 
 const (
@@ -32,7 +33,12 @@ type Player struct {
 func main() {
 	dir = cfg.dir
 	names = cfg.names
-	fmt.Printf("Checking the directory '%v' every 5 seconds for new SC2 replays...\n", dir)
+	args := os.Args
+
+	if len(args) > 1 {
+		milliseconds, _ = strconv.Atoi(os.Args[1])
+	}
+	fmt.Printf("Checking the directory '%v' every %v milliseconds for new SC2 replays...\n", dir, milliseconds)
 	files, _ := ioutil.ReadDir(dir)
 
 	// set start MMR and current MMR (if starting w/ non-empty folder)
@@ -57,7 +63,7 @@ func main() {
 	fileCnt := numFiles(files)
 
 	for {
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Duration(milliseconds) * time.Millisecond)
 
 		if fileCnt == numFiles(files) {
 			files, _ = ioutil.ReadDir(dir)

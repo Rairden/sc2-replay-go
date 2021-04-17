@@ -1,4 +1,6 @@
 # Binaries for programs and plugins
+*.exe
+*.exe~
 *.dll
 *.so
 *.dylib
@@ -12,9 +14,27 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+
+### Erik's ignore #############################################################
+
 # Ignores the whole .idea folder (Jetbrains) and all .iml files
 .idea/
 
 *.txt
 *.json
 
+# archive or compressed files
+*.tar.bz2
+*.tar.gz
+*.tar.xz
+*.tar.7z
+*.bz2
+*.rar
+*.gz
+*.tar
+*.tbz2
+*.tgz
+*.zip
+*.Z
+*.7z
+*.jar
