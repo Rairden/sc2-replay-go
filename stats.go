@@ -46,7 +46,7 @@ func writeData(fullPath string, data string) {
 }
 
 func (p *Player) writeMMRdiff() {
-	files, _ := ioutil.ReadDir(dir)
+	files, _ := ioutil.ReadDir(cfg.dir)
 	if p.startMMR == 0 || numFiles(files) == 1 {
 		writeData(MMRdiff_txt, "+0 MMR\n")
 		return

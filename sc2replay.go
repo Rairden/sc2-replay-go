@@ -11,9 +11,7 @@ import (
 )
 
 var (
-	dir          string
-	names        []string
-	player       = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, 0, 0}
+	player       = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, 0, 0, nil}
 	matchup      = NIL
 	milliseconds = 1000
 )
@@ -28,23 +26,27 @@ const (
 type Player struct {
 	ZvP, ZvT, ZvZ [2]uint8
 	startMMR, MMR float64
+	profile       []Profile
+}
+
+type Profile struct {
+	url, name, race                        string
+	regionId, realmId, profileId, ladderId int
 }
 
 func main() {
-	dir = cfg.dir
-	names = cfg.names
 	args := os.Args
 
 	if len(args) > 1 {
 		milliseconds, _ = strconv.Atoi(os.Args[1])
 	}
-	fmt.Printf("Checking the directory '%v' every %v milliseconds for new SC2 replays...\n", dir, milliseconds)
-	files, _ := ioutil.ReadDir(dir)
+	fmt.Printf("Checking the directory '%v' every %v milliseconds for new SC2 replays...\n", cfg.dir, milliseconds)
+	files, _ := ioutil.ReadDir(cfg.dir)
 
 	// set start MMR and current MMR (if starting w/ non-empty folder)
 	if len(files) >= 1 {
-		oldestFile := getLeastModified(dir)
-		newestFile := getLastModified(dir)
+		oldestFile := getLeastModified(cfg.dir)
+		newestFile := getLastModified(cfg.dir)
 		firstRep := decodeReplay(oldestFile)
 		player.startMMR = player.setMMR(firstRep)
 
@@ -66,7 +68,7 @@ func main() {
 		time.Sleep(time.Duration(milliseconds) * time.Millisecond)
 
 		if fileCnt == numFiles(files) {
-			files, _ = ioutil.ReadDir(dir)
+			files, _ = ioutil.ReadDir(cfg.dir)
 			continue
 		}
 
@@ -79,7 +81,7 @@ func main() {
 			continue
 		}
 
-		lastModified := getLastModified(dir)
+		lastModified := getLastModified(cfg.dir)
 		player.parseReplay(lastModified)
 		replay := decodeReplay(lastModified)
 		mmr := player.setMMR(replay)
@@ -94,7 +96,7 @@ func main() {
 }
 
 func decodeReplay(file os.FileInfo) *rep.Rep {
-	r, err := rep.NewFromFileEvts(dir+file.Name(), false, false, false)
+	r, err := rep.NewFromFileEvts(cfg.dir+file.Name(), false, false, false)
 	check(err)
 	defer r.Close()
 	return r
@@ -161,7 +163,7 @@ func incScore(name *string, ZvX *[2]uint8) {
 
 func isPlayer(name *string) bool {
 	var match bool
-	for _, toon := range names {
+	for _, toon := range cfg.names {
 		if *name == toon {
 			match = true
 			break

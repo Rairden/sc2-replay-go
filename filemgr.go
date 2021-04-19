@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 )
 
 var (
@@ -37,9 +39,25 @@ func init() {
 
 		names := make([]string, len(toons))
 		for i := range toons {
-			names[i] = toons[i].(string)
-		}
+			arr := toons[i].([]interface{})
 
+			url := arr[0].(string)
+			playerName := arr[1].(string)
+			race := arr[2].(string)
+			names[i] = playerName
+
+			split := strings.Split(url, "/")
+
+			regionId, _ := strconv.Atoi(split[5])
+			realmId, _ := strconv.Atoi(split[6])
+			profileId, _ := strconv.Atoi(split[7])
+
+			profile := &Profile{
+				url, playerName, race, regionId, realmId, profileId, 0,
+			}
+
+			player.profile = append(player.profile, *profile)
+		}
 		cfg = settings{names, dir}
 
 	} else {
@@ -68,10 +86,11 @@ func cfgToString() string {
 	return string(b)
 }
 
-var config = `# name - Put a comma-separated list of your SC2 player names. ID not required.
+var config = `# name - Put a comma-separated list of your SC2 account like in example (url, name, race).
 [account]
-name = [ "Gixxasaurus", "Rairden" ]
-ID = [ 1331332, 4545534 ]
+name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ],
+		 [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ] ]
+useAPI = true
 
 # dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 [directory]
