@@ -27,8 +27,10 @@ var (
 
 // the cfg.toml file
 type settings struct {
-	names []string
-	dir   string
+	names      []string
+	dir        string
+	useAPI     bool
+	updateTime int
 }
 
 func init() {
@@ -36,6 +38,8 @@ func init() {
 		config, _ := toml.Load(cfgToString())
 		toons := config.Get("account.name").([]interface{})
 		dir := config.Get("directory.dir").(string)
+		useAPI := config.Get("settings.useAPI").(bool)
+		updateTime := config.Get("settings.updateTime").(int)
 
 		names := make([]string, len(toons))
 		for i := range toons {
@@ -58,7 +62,7 @@ func init() {
 
 			player.profile = append(player.profile, *profile)
 		}
-		cfg = settings{names, dir}
+		cfg = settings{names, dir, useAPI, updateTime}
 
 	} else {
 		writeData(cfg_toml, config)
@@ -90,11 +94,14 @@ var config = `# name - Put a comma-separated list of your SC2 account like in ex
 [account]
 name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ],
 		 [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ] ]
-useAPI = true
 
 # dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 [directory]
 #dir = "/home/erik/scratch/replays/"
 #dir = "C:/Users/Erik/Downloads/reps/"
 dir = "C:\\Users\\Erik\\Downloads\\reps\\"
+
+[settings]
+useAPI = true
+updateTime = 1000
 `
