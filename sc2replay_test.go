@@ -38,7 +38,7 @@ func Test_matchupToString(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if got := matchupToString(&test.player.ZvX); got != test.want {
+		if got := scoreToString(&test.player.ZvX); got != test.want {
 			t.Errorf("want: %v", test.want)
 			t.Errorf(" got: %v\n", got)
 		}

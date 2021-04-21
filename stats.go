@@ -8,29 +8,39 @@ import (
 	"os"
 )
 
-func (p *Player) setMMR(r *rep.Rep) float64 {
-	players := r.Details.Players()
-	metadata := r.Metadata.Players()
+func (p *Player) setMMR(r *rep.Rep) int {
+	type toon struct {
+		Name string
+		mmr int64
+	}
 
-	if isPlayer(&players[0].Name) {
-		mmr := metadata[0].Value("MMR")
-		if p.isInvalidMMR(mmr) {
+	var players []toon
+	initData := r.InitData.UserInitDatas
+
+	for i := 0; i < 2; i++ {
+		p1 := toon{Name: initData[i].Name(), mmr: initData[i].MMR()}
+		players = append(players, p1)
+	}
+
+	if isMyName(&players[0].Name) {
+		mmr := players[0].mmr
+		if p.isInvalidMMR(int(mmr)) {
 			return 0
 		}
-		p.MMR = mmr.(float64)
+		p.MMR = int(mmr)
 	} else {
-		mmr := metadata[1].Value("MMR")
-		if p.isInvalidMMR(mmr) {
+		mmr := players[1].mmr
+		if p.isInvalidMMR(int(mmr)) {
 			return 0
 		}
-		p.MMR = mmr.(float64)
+		p.MMR = int(mmr)
 	}
 
 	return p.MMR
 }
 
-func (p *Player) isInvalidMMR(mmr interface{}) bool {
-	if mmr == nil || mmr.(float64) < 0 {
+func (p *Player) isInvalidMMR(mmr int) bool {
+	if mmr <= 0 {
 		p.MMR = 0
 		return true
 	}
@@ -51,17 +61,21 @@ func (p *Player) writeMMRdiff() {
 		writeData(MMRdiff_txt, "+0 MMR\n")
 		return
 	}
+	writeMMRdiff(p.startMMR - p.MMR)
+}
 
+func writeMMRdiff(diff int) {
 	var result string
-	diff := p.startMMR - p.MMR
-
 	if diff <= 0 {
-		diff = math.Abs(diff)
-		result = fmt.Sprintf("+%.f MMR\n", diff)
+		result = fmt.Sprintf("+%v MMR\n", diff)
 	} else {
-		result = fmt.Sprintf("-%.f MMR\n", diff)
+		result = fmt.Sprintf("-%v MMR\n", diff)
 	}
 	writeData(MMRdiff_txt, result)
+}
+
+func (p *Player) calcMMRdiffAPI(currMMR int) {
+	writeMMRdiff(p.MMR - currMMR)
 }
 
 func (p *Player) writeWinRate() {
