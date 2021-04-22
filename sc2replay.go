@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"github.com/icza/s2prot/rep"
-	"golang.org/x/oauth2/clientcredentials"
+	"io/fs"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -127,13 +125,11 @@ func mainNoAPI() {
 	files, _ := ioutil.ReadDir(cfg.dir)
 	// set start MMR and current MMR (if starting w/ non-empty folder)
 	if len(files) >= 1 {
-		oldestFile := getLeastModified(cfg.dir)
-		firstGame := fileToGame(oldestFile)
-		player.startMMR = player.setMMR(firstGame)
+		player.startMMR = player.setStartMMR(files)
 
 		newestFile := getLastModified(cfg.dir)
-		lastGame := fileToGame(newestFile)
-		player.setMMR(lastGame)
+		newestGame := fileToGame(newestFile)
+		player.setMMR(newestGame)
 
 		player.updateAllScores(files)
 		player.writeMMRdiff()
@@ -163,51 +159,30 @@ func mainNoAPI() {
 			continue
 		}
 
-		newestFile := getLastModified(cfg.dir)
-		game := fileToGame(newestFile)
-		player.SetScore(game.players[0].name, game.matchup)
-		mmr := player.setMMR(game)
+		game := updateScore()
+		player.setMMR(game)
 		player.writeMMRdiff()
 		player.writeWinRate()
 		saveFile(game.matchup)
+	}
+}
 
-		if numFiles(files) == 1 || player.startMMR == 0 {
-			player.startMMR = mmr
+func updateScore() Game {
+	f := getLastModified(cfg.dir)
+	g := fileToGame(f)
+	player.SetScore(g.players[0].name, g.matchup)
+	return g
+}
+
+func (p *Player) updateAllScores(files []os.FileInfo) {
+	for _, file := range files {
+		g := fileToGame(file)
+		if g.players[0].result == "Victory" {
+			p.SetScore(g.players[0].name, g.matchup)
+		} else {
+			p.SetScore(g.players[1].name, g.matchup)
 		}
 	}
-}
-
-func setLadderId(client *http.Client) {
-	// set ladderId if not set
-	if player.profile[cfg.mainToon].ladderId == "" {
-		ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
-			player.profile[cfg.mainToon].region, player.profile[cfg.mainToon].regionId,
-			player.profile[cfg.mainToon].realmId, player.profile[cfg.mainToon].profileId)
-
-		apiLadderId := getLadderSummary(client, ladderSummaryAPI, player.profile[cfg.mainToon].race)
-		player.profile[cfg.mainToon].ladderId = apiLadderId
-	}
-}
-
-func getMMR(client *http.Client) int {
-	// https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
-	ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
-		player.profile[cfg.mainToon].region, player.profile[cfg.mainToon].regionId,
-		player.profile[cfg.mainToon].realmId, player.profile[cfg.mainToon].profileId, player.profile[cfg.mainToon].ladderId)
-
-	return getLadder(client, ladderAPI)
-}
-
-func getBattleNetClient() *http.Client {
-	config := &clientcredentials.Config{
-		ClientID:     cfg.apiClientId,
-		ClientSecret: cfg.apiClientPass,
-		TokenURL:     "https://us.battle.net/oauth/token",
-	}
-
-	// https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/summary?locale=en_US&access_token=xxx
-	client := config.Client(context.Background())
-	return client
 }
 
 func decodeReplay(file os.FileInfo) *rep.Rep {
@@ -217,19 +192,7 @@ func decodeReplay(file os.FileInfo) *rep.Rep {
 	return r
 }
 
-func (p *Player) updateAllScores(files []os.FileInfo) {
-	for _, file := range files {
-		replay := decodeReplay(file)
-		g := getGame(replay)
-		if g.players[0].result == "Victory" {
-			p.SetScore(g.players[0].name, g.matchup)
-		} else {
-			p.SetScore(g.players[1].name, g.matchup)
-		}
-	}
-}
-
-func fileToGame(file os.FileInfo) Game {
+func fileToGame(file fs.FileInfo) Game {
 	replay := decodeReplay(file)
 	return getGame(replay)
 }
@@ -355,6 +318,15 @@ func scoreToString(ZvX *[2]uint8) string {
 	return str
 }
 
+// sort by modification time ascending
+func sortFilesModTime(files []fs.FileInfo) []os.FileInfo {
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].ModTime().Before(files[j].ModTime())
+	})
+	return files
+}
+
+// using path is more expensive than a []fs.FileInfo param, but I need to refresh dir
 func getLastModified(path string) os.FileInfo {
 	files, _ := ioutil.ReadDir(path)
 

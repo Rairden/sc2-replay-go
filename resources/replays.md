@@ -24,10 +24,14 @@ Two to three of my first placement matches had that -36400 MMR.
 The correct output for my record here is:
 
 ```
-ZvP: 1-2  
-ZvT: 0-3  
-ZvZ: 1-1
+-4 MMR
+25%
+ 1 - 2
+ 0 - 3
+ 1 - 1
 ```
+
+because the first legal MMR is the 3rd game at 3049, and last game is 3045. So -4 MMR.
 
 My SC2 player names and ID's are:
 
