@@ -2,44 +2,30 @@ package main
 
 import (
 	"fmt"
-	"github.com/icza/s2prot/rep"
 	"io/ioutil"
 	"math"
 	"os"
 )
 
-func (p *Player) setMMR(r *rep.Rep) int {
-	type toon struct {
-		Name string
-		mmr int64
-	}
-
-	var players []toon
-	initData := r.InitData.UserInitDatas
-
-	for i := 0; i < 2; i++ {
-		p1 := toon{Name: initData[i].Name(), mmr: initData[i].MMR()}
-		players = append(players, p1)
-	}
-
-	if isMyName(&players[0].Name) {
-		mmr := players[0].mmr
-		if p.isInvalidMMR(int(mmr)) {
+func (p *Player) setMMR(game Game) int64 {
+	if isMyName(game.players[0].name) {
+		mmr := game.players[0].mmr
+		if p.isInvalidMMR(mmr) {
 			return 0
 		}
-		p.MMR = int(mmr)
+		p.MMR = mmr
 	} else {
-		mmr := players[1].mmr
-		if p.isInvalidMMR(int(mmr)) {
+		mmr := game.players[1].mmr
+		if p.isInvalidMMR(mmr) {
 			return 0
 		}
-		p.MMR = int(mmr)
+		p.MMR = mmr
 	}
 
 	return p.MMR
 }
 
-func (p *Player) isInvalidMMR(mmr int) bool {
+func (p *Player) isInvalidMMR(mmr int64) bool {
 	if mmr <= 0 {
 		p.MMR = 0
 		return true
@@ -64,7 +50,7 @@ func (p *Player) writeMMRdiff() {
 	writeMMRdiff(p.startMMR - p.MMR)
 }
 
-func writeMMRdiff(diff int) {
+func writeMMRdiff(diff int64) {
 	var result string
 	if diff <= 0 {
 		result = fmt.Sprintf("+%v MMR\n", diff)
@@ -74,8 +60,8 @@ func writeMMRdiff(diff int) {
 	writeData(MMRdiff_txt, result)
 }
 
-func (p *Player) calcMMRdiffAPI(currMMR int) {
-	writeMMRdiff(p.MMR - currMMR)
+func (p *Player) calcMMRdiffAPI(apiMMR int64) {
+	writeMMRdiff(p.MMR - apiMMR)
 }
 
 func (p *Player) writeWinRate() {

@@ -29,14 +29,15 @@ type settings struct {
 	names                           []string
 	dir, apiClientId, apiClientPass string
 	useAPI                          bool
-	updateTime, main                int64
+	updateTime                      int64
+	main                            string
 }
 
 func init() {
 	if cfgExists() {
 		config, _ := toml.Load(cfgToString())
 		toons := config.Get("account.name").([]interface{})
-		main := config.Get("account.main").(int64)
+		main := config.Get("account.main").(string)
 		dir := config.Get("directory.dir").(string)
 		useAPI := config.Get("settings.useAPI").(bool)
 		updateTime := config.Get("settings.updateTime").(int64)
@@ -48,9 +49,9 @@ func init() {
 			arr := toons[i].([]interface{})
 
 			url := arr[0].(string)
-			playerName := arr[1].(string)
+			name := arr[1].(string)
 			race := arr[2].(string)
-			names[i] = playerName
+			names[i] = name
 
 			split := strings.Split(url, "/")
 
@@ -58,22 +59,22 @@ func init() {
 			realmId := split[6]
 			profileId := split[7]
 
-			regionString := convertRegionToString(regionId)
+			region := getRegion(regionId, realmId)
 
 			profile := &Profile{
-				url, playerName, race,
+				url, name, race,
 				regionId, realmId, profileId,
-				"", regionString,
+				"", region,
 			}
 
-			player.profile = append(player.profile, *profile)
+			player.profile[name] = profile
 		}
+
 		cfg = settings{
 			names,
 			dir, apiClientId, apiClientPass,
 			useAPI,
 			updateTime, main}
-		fmt.Println()
 
 	} else {
 		writeData(cfg_toml, myToml)
@@ -82,24 +83,27 @@ func init() {
 	}
 }
 
-func convertRegionToString(reg string) string {
+// https://develop.battle.net/documentation/guides/regionality-and-apis
+func getRegion(reg, realmId string) string {
 	switch reg {
 	case "1":
 		return "us"
 	case "2":
 		return "eu"
+	case "3":
+		if realmId == "1" {
+			return "kr"
+		}
+		if realmId == "2" {
+			return "tw"
+		}
 	}
 	return ""
 }
 
 func cfgExists() bool {
 	_, err := os.Open(cfg_toml)
-
-	if err != nil {
-		return false
-	}
-
-	return true
+	return err == nil
 }
 
 func cfgToString() string {
@@ -112,14 +116,14 @@ func cfgToString() string {
 }
 
 var myToml = `# name - Put a comma-separated list of your SC2 account like in the example (url, name, race).
-# main - You have to choose ONLY one of your names (accounts). Counting starts at 0.
+# main - You must choose only one name to use.
 #  dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 
 [account]
 name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ],
          [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ] ]
 
-main = 0
+main = "Gixxasaurus"
 
 [directory]
 dir = "/home/erik/scratch/replays/"

@@ -39,20 +39,20 @@ type RanksAndPools struct {
 	BonusPool int `json:"bonusPool"`
 }
 
-var Ladder3JSON = []byte(`{
+var empty1JSON = []byte(`{
   "ladderTeams": [],
   "allLadderMemberships": [],
   "ranksAndPools": []
 }`)
 
-var Ladder2JSON = []byte(`{
-    "ladderTeams": [],
-    "allLadderMemberships": [
-        {
-            "ladderId": "298982",
-            "localizedGameMode": "1v1 Platinum",
-            "rank": 40
-        }
-    ],
-    "ranksAndPools": []
+var empty2JSON = []byte(`{
+   "ladderTeams": [],
+   "allLadderMemberships": [
+      {
+         "ladderId": "298982",
+         "localizedGameMode": "1v1 Platinum",
+         "rank": 40
+      }
+   ],
+   "ranksAndPools": []
 }`)

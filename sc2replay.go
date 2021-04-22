@@ -13,28 +13,42 @@ import (
 	"time"
 )
 
-var (
-	player  = Player{[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, 0, 0, nil}
-	matchup = NIL
-)
+var player = &Player{
+	[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
+	0, 0,
+	make(map[string]*Profile),
+}
 
 const (
-	NIL = uint8(iota)
+	NIL uint8 = iota
 	ZvP
 	ZvT
 	ZvZ
 )
 
+type Game struct {
+	players []toon
+	matchup uint8
+}
+
 type Player struct {
 	ZvP, ZvT, ZvZ [2]uint8
-	startMMR, MMR int
-	profile       []Profile
+	startMMR, MMR int64
+	profile       map[string]*Profile
 }
 
 type Profile struct {
 	url, name, race                        string
 	regionId, realmId, profileId, ladderId string
-	regionString                           string
+	region                                 string
+}
+
+type toon struct {
+	profileId int64
+	name      string
+	mmr       int64
+	result    string
+	matchup   uint8
 }
 
 func main() {
@@ -52,22 +66,26 @@ func mainAPI() {
 	client := getBattleNetClient()
 	setLadderId(client)		// 1. make request to ladder summary API. Get ladderId.
 
-	currMMR := 0
+	var apiMMR int64
+
 	if player.profile[cfg.main].ladderId != "" {
-		currMMR = getMMR(client)
-		if currMMR != 0 {
-			player.startMMR = currMMR
+		apiMMR = int64(getMMR(client))
+		if apiMMR != 0 {
+			player.startMMR = apiMMR
 		}
 	}
 
 	// set start MMR and current MMR (if starting w/ non-empty folder)
 	if len(files) >= 1 {
 		oldestFile := getLeastModified(cfg.dir)
-		firstRep := decodeReplay(oldestFile)
-		player.startMMR = player.setMMR(firstRep)
+		firstGame := fileToGame(oldestFile)
+		player.startMMR = player.setMMR(firstGame)
 
-		updateAllScores(files)
-		player.calcMMRdiffAPI(currMMR)
+		player.updateAllScores(files)
+
+		if player.MMR != 0 {
+			player.calcMMRdiffAPI(apiMMR)
+		}
 
 		player.writeWinRate()
 		saveAllFiles()
@@ -91,36 +109,26 @@ func mainAPI() {
 		// If you don't want to restart program, you can just delete all replays from directory.
 		if numFiles(files) == 0 {
 			player.resetPlayer()
-			currMMR = getMMR(client)
-			if currMMR != 0 {
-				player.startMMR = currMMR
-			}
+			apiMMR = int64(getMMR(client))
+			player.startMMR = apiMMR
 			saveAllFiles()
 			saveResetMMR()
 			continue
 		}
 
-		lastModified := getLastModified(cfg.dir)
-		parseReplay(lastModified)
-		replay := decodeReplay(lastModified)
-		_ = replay
+		newestFile := getLastModified(cfg.dir)
+		game := fileToGame(newestFile)
+		player.SetScore(game.players[0].name, game.matchup)
 
-		player.calcMMRdiffAPI(getMMR(client))
-		player.writeWinRate()
-		saveFile()
+		mmr := getMMR(client)
+		player.MMR = int64(mmr)
 
-		// todo: fix me (api NO)
-		if numFiles(files) == 1 || player.startMMR == 0 {
-			// player.startMMR = mmr
+		if apiMMR != 0 {
+			player.calcMMRdiffAPI(int64(mmr))
 		}
+		player.writeWinRate()
+		saveFile(game.matchup)
 	}
-}
-
-func (p *Player) resetPlayer() {
-	p.ZvP = [2]uint8{0, 0}
-	p.ZvT = [2]uint8{0, 0}
-	p.ZvZ = [2]uint8{0, 0}
-	p.MMR, p.startMMR = 0, 0
 }
 
 func mainNoAPI() {
@@ -128,14 +136,14 @@ func mainNoAPI() {
 	// set start MMR and current MMR (if starting w/ non-empty folder)
 	if len(files) >= 1 {
 		oldestFile := getLeastModified(cfg.dir)
+		firstGame := fileToGame(oldestFile)
+		player.startMMR = player.setMMR(firstGame)
+
 		newestFile := getLastModified(cfg.dir)
-		firstRep := decodeReplay(oldestFile)
-		player.startMMR = player.setMMR(firstRep)
+		lastGame := fileToGame(newestFile)
+		player.setMMR(lastGame)
 
-		replay := decodeReplay(newestFile)
-		player.setMMR(replay)
-
-		updateAllScores(files)
+		player.updateAllScores(files)
 		player.writeMMRdiff()
 		player.writeWinRate()
 		saveAllFiles()
@@ -163,13 +171,13 @@ func mainNoAPI() {
 			continue
 		}
 
-		lastModified := getLastModified(cfg.dir)
-		parseReplay(lastModified)
-		replay := decodeReplay(lastModified)
-		mmr := player.setMMR(replay)
+		newestFile := getLastModified(cfg.dir)
+		game := fileToGame(newestFile)
+		player.SetScore(game.players[0].name, game.matchup)
+		mmr := player.setMMR(game)
 		player.writeMMRdiff()
 		player.writeWinRate()
-		saveFile()
+		saveFile(game.matchup)
 
 		if numFiles(files) == 1 || player.startMMR == 0 {
 			player.startMMR = mmr
@@ -181,17 +189,18 @@ func setLadderId(client *http.Client) {
 	// set ladderId if not set
 	if player.profile[cfg.main].ladderId == "" {
 		ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
-			player.profile[cfg.main].regionString, player.profile[cfg.main].regionId,
+			player.profile[cfg.main].region, player.profile[cfg.main].regionId,
 			player.profile[cfg.main].realmId, player.profile[cfg.main].profileId)
 
-		player.profile[cfg.main].ladderId = getLadderSummary(client, ladderSummaryAPI, player.profile[cfg.main].race)
+		apiLadderId := getLadderSummary(client, ladderSummaryAPI, player.profile[cfg.main].race)
+		player.profile[cfg.main].ladderId = apiLadderId
 	}
 }
 
 func getMMR(client *http.Client) int {
 	// https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
 	ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
-		player.profile[cfg.main].regionString, player.profile[cfg.main].regionId,
+		player.profile[cfg.main].region, player.profile[cfg.main].regionId,
 		player.profile[cfg.main].realmId, player.profile[cfg.main].profileId, player.profile[cfg.main].ladderId)
 
 	return getLadder(client, ladderAPI)
@@ -216,56 +225,75 @@ func decodeReplay(file os.FileInfo) *rep.Rep {
 	return r
 }
 
-func parseReplay(file os.FileInfo) {
-	r := decodeReplay(file)
-	updateScore(r)
-}
-
-func updateAllScores(files []os.FileInfo) {
+func (p *Player) updateAllScores(files []os.FileInfo) {
 	for _, file := range files {
-		parseReplay(file)
+		replay := decodeReplay(file)
+		game := getGame(replay)
+		if game.players[0].result == "Victory" {
+			p.SetScore(game.players[0].name, game.matchup)
+		} else {
+			p.SetScore(game.players[1].name, game.matchup)
+		}
 	}
 }
 
-func updateScore(r *rep.Rep) {
-	matchup := r.Details.Matchup()
+func fileToGame(file os.FileInfo) Game {
+	replay := decodeReplay(file)
+	return getGame(replay)
+}
+
+func getGame(r *rep.Rep) Game {
+	Matchup := r.Details.Matchup()
 	players := r.Details.Players()
+	initData := getInitData(r)
+	userInitDatas := initData.UserInitDatas
 
-	setMatchup(&matchup)
+	mu := getMatchup(Matchup)
+	var toons []toon
 
-	if players[0].Result().Name == "Victory" {
-		player.SetScore(&players[0].Name)
-	} else {
-		player.SetScore(&players[1].Name)
+	for i := 0; i < 2; i++ {
+		p1 := toon{
+			name:      userInitDatas[i].Name(),
+			mmr:       userInitDatas[i].MMR(),
+			profileId: players[i].Toon.ID(),
+			result:    players[i].Result().String(),
+			matchup: mu,
+		}
+		toons = append(toons, p1)
+	}
+
+	for i := 0; i < 2; i++ {
+		player.printResults(i, toons)
+	}
+
+	return Game{players: toons, matchup: mu}
+}
+
+func (p *Player) printResults(i int, toons []toon) {
+	if _, ok := p.profile[toons[i].name]; ok {
+		fmt.Printf("%-20v %8v  %-8v %v\n", toons[i].name, toons[i].mmr, toons[i].result, toons[i].matchup)
 	}
 }
 
-// todo: fix/replace updateScore(*rep.Rep) so it also pulls from InitData (name and optionally MMR)
-func foo(r *rep.Rep) {
-	type toon struct {
-		Name string
-		mmr int64
-	}
-
-	// var players []toon
-	// initData := r.InitData.UserInitDatas
+func getInitData(r *rep.Rep) *rep.InitData {
+	return &r.InitData
 }
 
-func setMatchup(mu *string) {
-	if *mu == "PvZ" || *mu == "ZvP" {
-		matchup = ZvP
-		return
+func getMatchup(mu string) uint8 {
+	if mu == "PvZ" || mu == "ZvP" {
+		return ZvP
 	}
-	if *mu == "TvZ" || *mu == "ZvT" {
-		matchup = ZvT
-		return
+	if mu == "TvZ" || mu == "ZvT" {
+		return ZvT
 	}
-	if *mu == "ZvZ" {
-		matchup = ZvZ
+	if mu == "ZvZ" {
+		return ZvZ
 	}
+	return NIL
 }
 
-func (p *Player) SetScore(name *string) {
+// SetScore give this any name, and matchup (0 NIL, 1 ZvP, 2 ZvT, 3 ZvZ)
+func (p *Player) SetScore(name string, matchup uint8) {
 	switch matchup {
 	case ZvP:
 		incScore(name, &p.ZvP)
@@ -276,7 +304,7 @@ func (p *Player) SetScore(name *string) {
 	}
 }
 
-func incScore(name *string, ZvX *[2]uint8) {
+func incScore(name string, ZvX *[2]uint8) {
 	isPlayer := isMyName(name)
 
 	if isPlayer {
@@ -286,18 +314,23 @@ func incScore(name *string, ZvX *[2]uint8) {
 	}
 }
 
-func isMyName(name *string) bool {
-	var match bool
-	for _, toon := range cfg.names {
-		if *name == toon {
-			match = true
-			break
-		}
-	}
-	return match
+func (p *Player) resetPlayer() {
+	p.ZvP = [2]uint8{0, 0}
+	p.ZvT = [2]uint8{0, 0}
+	p.ZvZ = [2]uint8{0, 0}
+	p.MMR, p.startMMR = 0, 0
 }
 
-func saveFile() {
+func isMyName(name string) bool {
+	for _, toon := range cfg.names {
+		if name == toon {
+			return true
+		}
+	}
+	return false
+}
+
+func saveFile(matchup uint8) {
 	switch matchup {
 	case ZvP:
 		writeFile(ZvP_txt, &player.ZvP)

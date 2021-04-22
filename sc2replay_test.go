@@ -15,7 +15,7 @@ func Test_createMatchup(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if setMatchup(&test.input); matchup != test.want {
+		if matchup := getMatchup(test.input); matchup != test.want {
 			t.Errorf("want: %v\n", test.want)
 			t.Errorf(" got: %v\n\n", matchup)
 		}
