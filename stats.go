@@ -41,6 +41,8 @@ func writeData(fullPath string, data string) {
 	file.Sync()
 }
 
+// FIXME: Solve edge case if their first 1-3 games are invalid mmr (0 or -36400).
+// 	Need to set their start MMR somehow.
 func (p *Player) writeMMRdiff() {
 	files, _ := ioutil.ReadDir(cfg.dir)
 	if p.startMMR == 0 || numFiles(files) == 1 {

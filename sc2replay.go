@@ -19,18 +19,6 @@ var player = &Player{
 	make(map[string]*Profile),
 }
 
-const (
-	NIL uint8 = iota
-	ZvP
-	ZvT
-	ZvZ
-)
-
-type Game struct {
-	players []toon
-	matchup uint8
-}
-
 type Player struct {
 	ZvP, ZvT, ZvZ [2]uint8
 	startMMR, MMR int64
@@ -43,12 +31,16 @@ type Profile struct {
 	region                                 string
 }
 
+type Game struct {
+	players []toon
+	matchup string
+}
+
 type toon struct {
 	profileId int64
 	name      string
 	mmr       int64
 	result    string
-	matchup   uint8
 }
 
 func main() {
@@ -68,7 +60,7 @@ func mainAPI() {
 
 	var apiMMR int64
 
-	if player.profile[cfg.main].ladderId != "" {
+	if player.profile[cfg.mainToon].ladderId != "" {
 		apiMMR = int64(getMMR(client))
 		if apiMMR != 0 {
 			player.startMMR = apiMMR
@@ -187,21 +179,21 @@ func mainNoAPI() {
 
 func setLadderId(client *http.Client) {
 	// set ladderId if not set
-	if player.profile[cfg.main].ladderId == "" {
+	if player.profile[cfg.mainToon].ladderId == "" {
 		ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
-			player.profile[cfg.main].region, player.profile[cfg.main].regionId,
-			player.profile[cfg.main].realmId, player.profile[cfg.main].profileId)
+			player.profile[cfg.mainToon].region, player.profile[cfg.mainToon].regionId,
+			player.profile[cfg.mainToon].realmId, player.profile[cfg.mainToon].profileId)
 
-		apiLadderId := getLadderSummary(client, ladderSummaryAPI, player.profile[cfg.main].race)
-		player.profile[cfg.main].ladderId = apiLadderId
+		apiLadderId := getLadderSummary(client, ladderSummaryAPI, player.profile[cfg.mainToon].race)
+		player.profile[cfg.mainToon].ladderId = apiLadderId
 	}
 }
 
 func getMMR(client *http.Client) int {
 	// https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
 	ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
-		player.profile[cfg.main].region, player.profile[cfg.main].regionId,
-		player.profile[cfg.main].realmId, player.profile[cfg.main].profileId, player.profile[cfg.main].ladderId)
+		player.profile[cfg.mainToon].region, player.profile[cfg.mainToon].regionId,
+		player.profile[cfg.mainToon].realmId, player.profile[cfg.mainToon].profileId, player.profile[cfg.mainToon].ladderId)
 
 	return getLadder(client, ladderAPI)
 }
@@ -228,11 +220,11 @@ func decodeReplay(file os.FileInfo) *rep.Rep {
 func (p *Player) updateAllScores(files []os.FileInfo) {
 	for _, file := range files {
 		replay := decodeReplay(file)
-		game := getGame(replay)
-		if game.players[0].result == "Victory" {
-			p.SetScore(game.players[0].name, game.matchup)
+		g := getGame(replay)
+		if g.players[0].result == "Victory" {
+			p.SetScore(g.players[0].name, g.matchup)
 		} else {
-			p.SetScore(game.players[1].name, game.matchup)
+			p.SetScore(g.players[1].name, g.matchup)
 		}
 	}
 }
@@ -242,6 +234,11 @@ func fileToGame(file os.FileInfo) Game {
 	return getGame(replay)
 }
 
+func getInitData(r *rep.Rep) *rep.InitData {
+	return &r.InitData
+}
+
+// toon has 4 fields. Three from rep.Details, and one from rep.InitData because the name is unreliable from Details.
 func getGame(r *rep.Rep) Game {
 	Matchup := r.Details.Matchup()
 	players := r.Details.Players()
@@ -253,61 +250,58 @@ func getGame(r *rep.Rep) Game {
 
 	for i := 0; i < 2; i++ {
 		p1 := toon{
-			name:      userInitDatas[i].Name(),
-			mmr:       userInitDatas[i].MMR(),
-			profileId: players[i].Toon.ID(),
-			result:    players[i].Result().String(),
-			matchup: mu,
+			players[i].Toon.ID(),
+			userInitDatas[i].Name(),
+			userInitDatas[i].MMR(),
+			players[i].Result().String(),
 		}
 		toons = append(toons, p1)
 	}
 
-	for i := 0; i < 2; i++ {
-		player.printResults(i, toons)
+	game := Game{toons, mu}
+	player.printResults(game)
+
+	return game
+}
+
+func (p *Player) printResults(g Game) {
+	for _, pl := range g.players {
+		if _, ok := p.profile[pl.name]; ok {
+			fmt.Printf("%s %-11s %6v %s\n", g.matchup, pl.name, pl.mmr, pl.result)
+			return
+		}
 	}
-
-	return Game{players: toons, matchup: mu}
 }
 
-func (p *Player) printResults(i int, toons []toon) {
-	if _, ok := p.profile[toons[i].name]; ok {
-		fmt.Printf("%-20v %8v  %-8v %v\n", toons[i].name, toons[i].mmr, toons[i].result, toons[i].matchup)
-	}
-}
-
-func getInitData(r *rep.Rep) *rep.InitData {
-	return &r.InitData
-}
-
-func getMatchup(mu string) uint8 {
+func getMatchup(mu string) string {
 	if mu == "PvZ" || mu == "ZvP" {
-		return ZvP
+		return "ZvP"
 	}
 	if mu == "TvZ" || mu == "ZvT" {
-		return ZvT
+		return "ZvT"
 	}
 	if mu == "ZvZ" {
-		return ZvZ
+		return "ZvZ"
 	}
-	return NIL
+	return ""
 }
 
-// SetScore give this any name, and matchup (0 NIL, 1 ZvP, 2 ZvT, 3 ZvZ)
-func (p *Player) SetScore(name string, matchup uint8) {
+// SetScore The name can be winner or loser.
+func (p *Player) SetScore(name, matchup string) {
 	switch matchup {
-	case ZvP:
+	case "ZvP":
 		incScore(name, &p.ZvP)
-	case ZvT:
+	case "ZvT":
 		incScore(name, &p.ZvT)
-	case ZvZ:
+	case "ZvZ":
 		incScore(name, &p.ZvZ)
 	}
 }
 
 func incScore(name string, ZvX *[2]uint8) {
-	isPlayer := isMyName(name)
+	isYou := isMyName(name)
 
-	if isPlayer {
+	if isYou {
 		ZvX[0]++
 	} else {
 		ZvX[1]++
@@ -322,21 +316,19 @@ func (p *Player) resetPlayer() {
 }
 
 func isMyName(name string) bool {
-	for _, toon := range cfg.names {
-		if name == toon {
-			return true
-		}
+	if _, ok := player.profile[name]; ok {
+		return true
 	}
 	return false
 }
 
-func saveFile(matchup uint8) {
+func saveFile(matchup string) {
 	switch matchup {
-	case ZvP:
+	case "ZvP":
 		writeFile(ZvP_txt, &player.ZvP)
-	case ZvT:
+	case "ZvT":
 		writeFile(ZvT_txt, &player.ZvT)
-	case ZvZ:
+	case "ZvZ":
 		writeFile(ZvZ_txt, &player.ZvZ)
 	}
 }

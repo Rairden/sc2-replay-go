@@ -44,7 +44,6 @@ func getLadderSummary(client *http.Client, url, race string) string {
 		return ""
 	}
 
-
 	body, err := ioutil.ReadAll(resp.Body)
 	fmt.Println()
 	if err != nil {
@@ -64,7 +63,7 @@ func getLadderSummary(client *http.Client, url, race string) string {
 			player1 := e.Team.Members[0]
 			if player1.FavoriteRace == race {
 				// Consider taking name from here as Details has garbage: github.com/icza/sc2prot/rep.Details  --> "&lt;QOSQO&gt;FoXx"
-				// players.profile[cfg.main].name = player1.Name
+				// players.profile[cfg.mainToon].name = player1.Name
 				return e.LadderID
 			}
 		}

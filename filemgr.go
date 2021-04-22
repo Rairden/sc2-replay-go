@@ -26,32 +26,29 @@ var (
 
 // the cfg.toml file
 type settings struct {
-	names                           []string
-	dir, apiClientId, apiClientPass string
-	useAPI                          bool
-	updateTime                      int64
-	main                            string
+	mainToon, dir              string
+	updateTime                 int64
+	useAPI                     bool
+	apiClientId, apiClientPass string
 }
 
 func init() {
 	if cfgExists() {
 		config, _ := toml.Load(cfgToString())
 		toons := config.Get("account.name").([]interface{})
-		main := config.Get("account.main").(string)
+		mainToon := config.Get("account.mainToon").(string)
 		dir := config.Get("directory.dir").(string)
 		useAPI := config.Get("settings.useAPI").(bool)
 		updateTime := config.Get("settings.updateTime").(int64)
 		apiClientId := config.Get("settings.apiClientId").(string)
 		apiClientPass := config.Get("settings.apiClientPass").(string)
 
-		names := make([]string, len(toons))
 		for i := range toons {
 			arr := toons[i].([]interface{})
 
 			url := arr[0].(string)
 			name := arr[1].(string)
 			race := arr[2].(string)
-			names[i] = name
 
 			split := strings.Split(url, "/")
 
@@ -63,18 +60,19 @@ func init() {
 
 			profile := &Profile{
 				url, name, race,
-				regionId, realmId, profileId,
-				"", region,
+				regionId, realmId, profileId, "",
+				region,
 			}
 
 			player.profile[name] = profile
 		}
 
 		cfg = settings{
-			names,
-			dir, apiClientId, apiClientPass,
+			mainToon, dir,
+			updateTime,
 			useAPI,
-			updateTime, main}
+			apiClientId, apiClientPass,
+		}
 
 	} else {
 		writeData(cfg_toml, myToml)
@@ -115,15 +113,16 @@ func cfgToString() string {
 	return string(b)
 }
 
-var myToml = `# name - Put a comma-separated list of your SC2 account like in the example (url, name, race).
-# main - You must choose only one name to use.
-#  dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
+var myToml = `#     name - Put a comma-separated list of your SC2 accounts like in the example (url, name, race).
+# mainToon - You must choose only one name to use.
+#      dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 
 [account]
 name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ],
-         [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ] ]
+         [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ],
+         [ "https://starcraft2.com/en-gb/profile/1/1/6901550", "PREAHLANY", "zerg"] ]
 
-main = "Gixxasaurus"
+mainToon = "Gixxasaurus"
 
 [directory]
 dir = "/home/erik/scratch/replays/"
@@ -132,7 +131,7 @@ dir = "/home/erik/scratch/replays/"
 
 [settings]
 updateTime = 1000
-useAPI = true
+useAPI = false
 apiClientId = "632b0e2b3f0a4d64abf4060794fca015"
 apiClientPass = "eR5qWtmpyzM4OWzRHqXzhkCwokOq8rEI"
 `
