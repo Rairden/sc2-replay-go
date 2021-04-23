@@ -7,13 +7,13 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 	"io/ioutil"
 	"net/http"
-	. "sc2-api/laddersummary"
 	"sc2-replay-go/api/ladder"
+	"sc2-replay-go/api/laddersummary"
 )
 
 func getBattleNetClient() *http.Client {
 	config := &clientcredentials.Config{
-		ClientID:     cfg.apiClientId,
+		ClientID:     cfg.apiClientID,
 		ClientSecret: cfg.apiClientPass,
 		TokenURL:     "https://us.battle.net/oauth/token",
 	}
@@ -23,29 +23,29 @@ func getBattleNetClient() *http.Client {
 	return client
 }
 
-// set ladderId if not set
-func setLadderId(client *http.Client) {
-	p := player.profile[cfg.mainToon]
-	if player.profile[cfg.mainToon].ladderId == "" {
+// set ladderID if not set
+func (p *player) setLadderID(client *http.Client) {
+	pl := p.profile[cfg.mainToon]
+	if pl.ladderID == "" {
 		ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
-			p.region, p.regionId, p.realmId, p.profileId)
+			pl.region, pl.regionID, pl.realmID, pl.profileID)
 
-		apiLadderId := getLadderSummary(client, ladderSummaryAPI, p.race)
-		p.ladderId = apiLadderId
+		apiLadderID := getLadderSummary(client, ladderSummaryAPI, pl.race)
+		pl.ladderID = apiLadderID
 	}
 }
 
 // https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
-func getMMR(client *http.Client) int {
-	p := player.profile[cfg.mainToon]
+func (p *player) getMmrAPI(client *http.Client) int {
+	pl := p.profile[cfg.mainToon]
 	ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
-		p.region, p.regionId, p.realmId, p.profileId, p.ladderId)
+		pl.region, pl.regionID, pl.realmID, pl.profileID, pl.ladderID)
 
 	return getLadder(client, ladderAPI)
 }
 
 func getLadder(client *http.Client, url string) int {
-	var ladder ladder.Ladder
+	var lad ladder.Struct
 
 	resp, err := client.Get(url)
 	if err != nil {
@@ -59,19 +59,19 @@ func getLadder(client *http.Client, url string) int {
 		return 0
 	}
 
-	json.Unmarshal(body, &ladder)
+	json.Unmarshal(body, &lad)
 
-	if resp.StatusCode != 200 || len(body) == 0 || len(ladder.RanksAndPools) == 0 {
+	if resp.StatusCode != 200 || len(body) == 0 || len(lad.RanksAndPools) == 0 {
 		return 0
 	}
 
-	pools := ladder.RanksAndPools[0]
+	pools := lad.RanksAndPools[0]
 	return pools.Mmr
 }
 
-// returns the ladderId
+// returns the ladderID
 func getLadderSummary(client *http.Client, url, race string) string {
-	var ls LadderSummary
+	var ls laddersummary.Struct
 
 	resp, err := client.Get(url)
 	if err != nil {

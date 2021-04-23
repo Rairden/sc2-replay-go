@@ -1,6 +1,6 @@
 package laddersummary
 
-type LadderSummary struct {
+type Struct struct {
 	ShowCaseEntries      []ShowCaseEntries      `json:"showCaseEntries"`
 	PlacementMatches     []interface{}          `json:"placementMatches"`
 	AllLadderMemberships []AllLadderMemberships `json:"allLadderMemberships"`

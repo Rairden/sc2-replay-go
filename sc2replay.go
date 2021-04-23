@@ -11,77 +11,73 @@ import (
 	"time"
 )
 
-var player = &Player{
-	[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
-	0, 0,
-	make(map[string]*Profile),
-}
-
-type Player struct {
+type player struct {
 	ZvP, ZvT, ZvZ [2]uint8
 	startMMR, MMR int64
-	profile       map[string]*Profile
+	profile       map[string]*profile
 }
 
-type Profile struct {
+type profile struct {
 	url, name, race                        string
-	regionId, realmId, profileId, ladderId string
+	regionID, realmID, profileID, ladderID string
 	region                                 string
 }
 
-type Game struct {
+type game struct {
 	players []toon
 	matchup string
 }
 
 type toon struct {
-	profileId int64
+	profileID int64
 	name      string
 	mmr       int64
 	result    string
 }
 
 func main() {
+	player := setup(cfgToml)
+
 	fmt.Printf("Checking the directory '%v' every %v milliseconds for new SC2 replays...\n", cfg.dir, cfg.updateTime)
 
 	if cfg.useAPI {
-		mainAPI()
+		mainAPI(player)
 	} else {
-		mainNoAPI()
+		mainNoAPI(player)
 	}
 }
 
-func mainAPI() {
+func mainAPI(pl *player) {
 	files, _ := ioutil.ReadDir(cfg.dir)
 	client := getBattleNetClient()
-	setLadderId(client)		// 1. make request to ladder summary API. Get ladderId.
+	pl.setLadderID(client) // 1. make request to ladder summary API. Get ladderID.
 
 	var apiMMR int64
 
-	if player.profile[cfg.mainToon].ladderId != "" {
-		apiMMR = int64(getMMR(client))
+	if pl.profile[cfg.mainToon].ladderID != "" {
+		apiMMR = int64(pl.getMmrAPI(client))
 		if apiMMR != 0 {
-			player.startMMR = apiMMR
+			pl.startMMR = apiMMR
 		}
 	}
 
 	// set start MMR and current MMR (if starting w/ non-empty folder)
 	if len(files) >= 1 {
-		oldestFile := getLeastModified(cfg.dir)
+		oldestFile := getFirstModified(cfg.dir)
 		firstGame := fileToGame(oldestFile)
-		player.startMMR = player.setMMR(firstGame)
+		pl.startMMR = pl.setMMR(firstGame)
 
-		player.updateAllScores(files)
+		pl.updateAllScores(files)
 
-		if player.MMR != 0 {
-			player.calcMMRdiffAPI(apiMMR)
+		if pl.MMR != 0 {
+			pl.calcMMRdiffAPI(apiMMR)
 		}
 
-		player.writeWinRate()
-		saveAllFiles()
+		pl.writeWinRate()
+		pl.saveAllFiles()
 	} else {
-		saveAllFiles()
-		saveResetMMR()
+		pl.saveAllFiles()
+		saveResetStats()
 	}
 
 	fileCnt := numFiles(files)
@@ -98,46 +94,46 @@ func mainAPI() {
 
 		// If you don't want to restart program, you can just delete all replays from directory.
 		if numFiles(files) == 0 {
-			player.resetPlayer()
-			apiMMR = int64(getMMR(client))
-			player.startMMR = apiMMR
-			saveAllFiles()
-			saveResetMMR()
+			pl.resetPlayer()
+			apiMMR = int64(pl.getMmrAPI(client))
+			pl.startMMR = apiMMR
+			pl.saveAllFiles()
+			saveResetStats()
 			continue
 		}
 
 		newestFile := getLastModified(cfg.dir)
 		game := fileToGame(newestFile)
-		player.SetScore(game.players[0].name, game.matchup)
+		pl.SetScore(game.players[0].name, game.matchup)
 
-		mmr := getMMR(client)
-		player.MMR = int64(mmr)
+		mmr := pl.getMmrAPI(client)
+		pl.MMR = int64(mmr)
 
 		if apiMMR != 0 {
-			player.calcMMRdiffAPI(int64(mmr))
+			pl.calcMMRdiffAPI(int64(mmr))
 		}
-		player.writeWinRate()
-		saveFile(game.matchup)
+		pl.writeWinRate()
+		pl.saveFile(game.matchup)
 	}
 }
 
-func mainNoAPI() {
+func mainNoAPI(pl *player) {
 	files, _ := ioutil.ReadDir(cfg.dir)
 	// set start MMR and current MMR (if starting w/ non-empty folder)
 	if len(files) >= 1 {
-		player.startMMR = player.setStartMMR(files)
+		pl.startMMR = pl.setStartMMR(files)
 
 		newestFile := getLastModified(cfg.dir)
 		newestGame := fileToGame(newestFile)
-		player.setMMR(newestGame)
+		pl.setMMR(newestGame)
 
-		player.updateAllScores(files)
-		player.writeMMRdiff()
-		player.writeWinRate()
-		saveAllFiles()
+		pl.updateAllScores(files)
+		pl.writeMMRdiff()
+		pl.writeWinRate()
+		pl.saveAllFiles()
 	} else {
-		saveAllFiles()
-		saveResetMMR()
+		pl.saveAllFiles()
+		saveResetStats()
 	}
 
 	fileCnt := numFiles(files)
@@ -153,35 +149,17 @@ func mainNoAPI() {
 		fileCnt = numFiles(files)
 
 		if numFiles(files) == 0 {
-			player.resetPlayer()
-			saveAllFiles()
-			saveResetMMR()
+			pl.resetPlayer()
+			pl.saveAllFiles()
+			saveResetStats()
 			continue
 		}
 
-		game := updateScore()
-		player.setMMR(game)
-		player.writeMMRdiff()
-		player.writeWinRate()
-		saveFile(game.matchup)
-	}
-}
-
-func updateScore() Game {
-	f := getLastModified(cfg.dir)
-	g := fileToGame(f)
-	player.SetScore(g.players[0].name, g.matchup)
-	return g
-}
-
-func (p *Player) updateAllScores(files []os.FileInfo) {
-	for _, file := range files {
-		g := fileToGame(file)
-		if g.players[0].result == "Victory" {
-			p.SetScore(g.players[0].name, g.matchup)
-		} else {
-			p.SetScore(g.players[1].name, g.matchup)
-		}
+		game := pl.updateScore()
+		pl.setMMR(game)
+		pl.writeMMRdiff()
+		pl.writeWinRate()
+		pl.saveFile(game.matchup)
 	}
 }
 
@@ -192,7 +170,7 @@ func decodeReplay(file os.FileInfo) *rep.Rep {
 	return r
 }
 
-func fileToGame(file fs.FileInfo) Game {
+func fileToGame(file fs.FileInfo) game {
 	replay := decodeReplay(file)
 	return getGame(replay)
 }
@@ -202,7 +180,7 @@ func getInitData(r *rep.Rep) *rep.InitData {
 }
 
 // toon has 4 fields. Three from rep.Details, and one from rep.InitData because the name is unreliable from Details.
-func getGame(r *rep.Rep) Game {
+func getGame(r *rep.Rep) game {
 	Matchup := r.Details.Matchup()
 	players := r.Details.Players()
 	initData := getInitData(r)
@@ -221,13 +199,10 @@ func getGame(r *rep.Rep) Game {
 		toons = append(toons, p1)
 	}
 
-	game := Game{toons, mu}
-	player.printResults(game)
-
-	return game
+	return game{toons, mu}
 }
 
-func (p *Player) printResults(g Game) {
+func (p *player) printResults(g game) {
 	for _, pl := range g.players {
 		if _, ok := p.profile[pl.name]; ok {
 			fmt.Printf("%s %-11s %6v %s\n", g.matchup, pl.name, pl.mmr, pl.result)
@@ -249,20 +224,39 @@ func getMatchup(mu string) string {
 	return ""
 }
 
-// SetScore The name can be winner or loser.
-func (p *Player) SetScore(name, matchup string) {
-	switch matchup {
-	case "ZvP":
-		incScore(name, &p.ZvP)
-	case "ZvT":
-		incScore(name, &p.ZvT)
-	case "ZvZ":
-		incScore(name, &p.ZvZ)
+// FIXME: consider changing this to use your toon and not grabbing winner.
+func (p *player) updateAllScores(files []os.FileInfo) {
+	for _, file := range files {
+		g := fileToGame(file)
+		if g.players[0].result == "Victory" {
+			p.SetScore(g.players[0].name, g.matchup)
+		} else {
+			p.SetScore(g.players[1].name, g.matchup)
+		}
 	}
 }
 
-func incScore(name string, ZvX *[2]uint8) {
-	isYou := isMyName(name)
+func (p *player) updateScore() game {
+	f := getLastModified(cfg.dir)
+	g := fileToGame(f)
+	p.SetScore(g.players[0].name, g.matchup)
+	return g
+}
+
+// SetScore The name can be winner or loser.
+func (p *player) SetScore(name, matchup string) {
+	switch matchup {
+	case "ZvP":
+		p.incScore(name, &p.ZvP)
+	case "ZvT":
+		p.incScore(name, &p.ZvT)
+	case "ZvZ":
+		p.incScore(name, &p.ZvZ)
+	}
+}
+
+func (p *player) incScore(name string, ZvX *[2]uint8) {
+	isYou := p.isMyName(name)
 
 	if isYou {
 		ZvX[0]++
@@ -271,40 +265,40 @@ func incScore(name string, ZvX *[2]uint8) {
 	}
 }
 
-func (p *Player) resetPlayer() {
+func (p *player) resetPlayer() {
 	p.ZvP = [2]uint8{0, 0}
 	p.ZvT = [2]uint8{0, 0}
 	p.ZvZ = [2]uint8{0, 0}
 	p.MMR, p.startMMR = 0, 0
 }
 
-func isMyName(name string) bool {
-	if _, ok := player.profile[name]; ok {
+func (p *player) isMyName(name string) bool {
+	if _, ok := p.profile[name]; ok {
 		return true
 	}
 	return false
 }
 
-func saveFile(matchup string) {
+func (p *player) saveFile(matchup string) {
 	switch matchup {
 	case "ZvP":
-		writeFile(ZvP_txt, &player.ZvP)
+		writeFile(zvpTxt, &p.ZvP)
 	case "ZvT":
-		writeFile(ZvT_txt, &player.ZvT)
+		writeFile(zvtTxt, &p.ZvT)
 	case "ZvZ":
-		writeFile(ZvZ_txt, &player.ZvZ)
+		writeFile(zvzTxt, &p.ZvZ)
 	}
 }
 
-func saveAllFiles() {
-	writeFile(ZvP_txt, &player.ZvP)
-	writeFile(ZvT_txt, &player.ZvT)
-	writeFile(ZvZ_txt, &player.ZvZ)
+func (p *player) saveAllFiles() {
+	writeFile(zvpTxt, &p.ZvP)
+	writeFile(zvtTxt, &p.ZvT)
+	writeFile(zvzTxt, &p.ZvZ)
 }
 
-func saveResetMMR() {
-	writeData(MMRdiff_txt, "+0 MMR\n")
-	writeData(winrate_txt, "0%\n")
+func saveResetStats() {
+	writeData(mmrDiffTxt, "+0 MMR\n")
+	writeData(winrateTxt, "0%\n")
 }
 
 func writeFile(fullPath string, mu *[2]uint8) {
@@ -336,7 +330,7 @@ func getLastModified(path string) os.FileInfo {
 	return files[0]
 }
 
-func getLeastModified(path string) os.FileInfo {
+func getFirstModified(path string) os.FileInfo {
 	files, _ := ioutil.ReadDir(path)
 
 	sort.Slice(files, func(i, j int) bool {

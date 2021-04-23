@@ -8,35 +8,30 @@ import (
 	"os"
 )
 
-func (p *Player) setMMR(g Game) int64 {
+func (p *player) setMMR(g game) int64 {
 	files, _ := os.ReadDir(cfg.dir)
+	MMR := p.getMMR(g)
 
-	if isMyName(g.players[0].name) {
-		MMR := g.players[0].mmr
-		if p.isInvalidMMR(MMR) {
-			p.MMR = 0
-			return 0
-		}
+	if MMR > 0 {
 		p.MMR = MMR
 		if len(files) == 1 {
 			p.startMMR = MMR
 		}
-	} else {
-		MMR := g.players[1].mmr
-		if p.isInvalidMMR(MMR) {
-			p.MMR = 0
-			return 0
-		}
-		p.MMR = MMR
-		if len(files) == 1 {
-			p.startMMR = MMR
-		}
+		return MMR
 	}
-
-	return p.MMR
+	return 0
 }
 
-func (p *Player) setStartMMR(files []fs.FileInfo) int64 {
+func (p *player) getMMR(g game) int64 {
+	for _, pl := range g.players {
+		if _, ok := p.profile[pl.name]; ok {
+			return pl.mmr
+		}
+	}
+	return 0
+}
+
+func (p *player) setStartMMR(files []fs.FileInfo) int64 {
 	files = sortFilesModTime(files)
 
 	for _, file := range files {
@@ -52,14 +47,6 @@ func (p *Player) setStartMMR(files []fs.FileInfo) int64 {
 	return 0
 }
 
-func (p *Player) isInvalidMMR(mmr int64) bool {
-	if mmr <= 0 {
-		p.startMMR, p.MMR = 0, 0
-		return true
-	}
-	return false
-}
-
 func writeData(fullPath string, data string) {
 	file, e := os.Create(fullPath)
 	check(e)
@@ -68,10 +55,10 @@ func writeData(fullPath string, data string) {
 	file.Sync()
 }
 
-func (p *Player) writeMMRdiff() {
+func (p *player) writeMMRdiff() {
 	files, _ := ioutil.ReadDir(cfg.dir)
 	if p.startMMR == 0 || numFiles(files) == 1 {
-		writeData(MMRdiff_txt, "+0 MMR\n")
+		writeData(mmrDiffTxt, "+0 MMR\n")
 		return
 	}
 	writeMMRdiff(p.startMMR - p.MMR)
@@ -85,27 +72,27 @@ func writeMMRdiff(diff int64) {
 	} else {
 		result = fmt.Sprintf("-%d MMR\n", diff)
 	}
-	writeData(MMRdiff_txt, result)
+	writeData(mmrDiffTxt, result)
 }
 
-func (p *Player) calcMMRdiffAPI(apiMMR int64) {
+func (p *player) calcMMRdiffAPI(apiMMR int64) {
 	writeMMRdiff(p.MMR - apiMMR)
 }
 
-func (p *Player) writeWinRate() {
+func (p *player) writeWinRate() {
 	wr := float64(p.getWins()) / float64(p.getTotalGames()) * 100
 	winrate := fmt.Sprintf("%.f%%\n", math.Round(wr))
-	writeData(winrate_txt, winrate)
+	writeData(winrateTxt, winrate)
 }
 
-func (p *Player) getTotalGames() uint8 {
+func (p *player) getTotalGames() uint8 {
 	x := p.ZvP[0] + p.ZvP[1]
 	y := p.ZvT[0] + p.ZvT[1]
 	z := p.ZvZ[0] + p.ZvZ[1]
 	return x + y + z
 }
 
-func (p *Player) getWins() uint8 {
+func (p *player) getWins() uint8 {
 	x := p.ZvP[0]
 	y := p.ZvT[0]
 	z := p.ZvZ[0]

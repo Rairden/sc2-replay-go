@@ -1,6 +1,6 @@
 package ladder
 
-type Ladder struct {
+type Struct struct {
 	LadderTeams             []LadderTeams           `json:"ladderTeams"`
 	AllLadderMemberships    []AllLadderMemberships  `json:"allLadderMemberships"`
 	LocalizedDivision       string                  `json:"localizedDivision"`

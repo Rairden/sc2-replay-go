@@ -12,16 +12,16 @@ import (
 )
 
 var (
-	_, r, _, _  = runtime.Caller(0) // linux (testing)
-	s, _        = os.Executable()   // win10
-	currDir     = path.Dir(s) + filepath.Join("/")
-	cfg_toml    = currDir + "cfg.toml"
-	ZvP_txt     = currDir + "ZvP.txt"
-	ZvT_txt     = currDir + "ZvT.txt"
-	ZvZ_txt     = currDir + "ZvZ.txt"
-	MMRdiff_txt = currDir + "MMR-diff.txt"
-	winrate_txt = currDir + "winrate.txt"
-	cfg         settings
+	_, r, _, _ = runtime.Caller(0) // linux (testing)
+	s, _       = os.Executable()   // win10
+	currDir    = path.Dir(s) + filepath.Join("/")
+	cfgToml    = currDir + "cfg.toml"
+	zvpTxt     = currDir + "ZvP.txt"
+	zvtTxt     = currDir + "ZvT.txt"
+	zvzTxt     = currDir + "ZvZ.txt"
+	mmrDiffTxt = currDir + "MMR-diff.txt"
+	winrateTxt = currDir + "winrate.txt"
+	cfg        settings
 )
 
 // the cfg.toml file
@@ -29,18 +29,25 @@ type settings struct {
 	mainToon, dir              string
 	updateTime                 int64
 	useAPI                     bool
-	apiClientId, apiClientPass string
+	apiClientID, apiClientPass string
 }
 
-func init() {
+// fullPath is your cfg.toml file
+func setup(absolutePath string) *player {
+	pl := &player{
+		[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
+		0, 0,
+		make(map[string]*profile),
+	}
+
 	if cfgExists() {
-		config, _ := toml.Load(cfgToString())
+		config, _ := toml.Load(cfgToString(absolutePath))
 		toons := config.Get("account.name").([]interface{})
 		mainToon := config.Get("account.mainToon").(string)
 		dir := config.Get("directory.dir").(string)
 		useAPI := config.Get("settings.useAPI").(bool)
 		updateTime := config.Get("settings.updateTime").(int64)
-		apiClientId := config.Get("settings.apiClientId").(string)
+		apiClientID := config.Get("settings.apiClientID").(string)
 		apiClientPass := config.Get("settings.apiClientPass").(string)
 
 		for i := range toons {
@@ -52,47 +59,48 @@ func init() {
 
 			split := strings.Split(url, "/")
 
-			regionId := split[5]
-			realmId := split[6]
-			profileId := split[7]
+			regionID := split[5]
+			realmID := split[6]
+			profileID := split[7]
 
-			region := getRegion(regionId, realmId)
+			region := getRegion(regionID, realmID)
 
-			profile := &Profile{
+			profile := &profile{
 				url, name, race,
-				regionId, realmId, profileId, "",
+				regionID, realmID, profileID, "",
 				region,
 			}
 
-			player.profile[name] = profile
+			pl.profile[name] = profile
 		}
 
 		cfg = settings{
 			mainToon, dir,
 			updateTime,
 			useAPI,
-			apiClientId, apiClientPass,
+			apiClientID, apiClientPass,
 		}
-
 	} else {
-		writeData(cfg_toml, myToml)
+		writeData(cfgToml, myToml)
 		fmt.Println("Now setup your cfg.toml file.")
 		os.Exit(0)
 	}
+
+	return pl
 }
 
 // https://develop.battle.net/documentation/guides/regionality-and-apis
-func getRegion(reg, realmId string) string {
+func getRegion(reg, realmID string) string {
 	switch reg {
 	case "1":
 		return "us"
 	case "2":
 		return "eu"
 	case "3":
-		if realmId == "1" {
+		if realmID == "1" {
 			return "kr"
 		}
-		if realmId == "2" {
+		if realmID == "2" {
 			return "tw"
 		}
 	}
@@ -100,13 +108,12 @@ func getRegion(reg, realmId string) string {
 }
 
 func cfgExists() bool {
-	_, err := os.Open(cfg_toml)
+	_, err := os.Open(cfgToml)
 	return err == nil
 }
 
-func cfgToString() string {
-	b, err := ioutil.ReadFile(cfg_toml)
-
+func cfgToString(absolutePath string) string {
+	b, err := ioutil.ReadFile(absolutePath)
 	if err != nil {
 		fmt.Printf("File not found: '%v'", b)
 	}
@@ -132,6 +139,6 @@ dir = "/home/erik/scratch/replays/"
 [settings]
 updateTime = 1000
 useAPI = false
-apiClientId = "632b0e2b3f0a4d64abf4060794fca015"
+apiClientID = "632b0e2b3f0a4d64abf4060794fca015"
 apiClientPass = "eR5qWtmpyzM4OWzRHqXzhkCwokOq8rEI"
 `
