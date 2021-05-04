@@ -5,6 +5,7 @@ import (
 	"github.com/icza/s2prot/rep"
 	"io/fs"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -17,10 +18,29 @@ type player struct {
 	profile       map[string]*profile
 }
 
+type player2 struct {
+	player
+	client *http.Client
+}
+
 type profile struct {
 	url, name, race                        string
 	regionID, realmID, profileID, ladderID string
 	region                                 string
+}
+
+type user interface {
+	getMMR() int64
+}
+
+func (p *player) getMMR() int64 {
+	newestFile := getLastModified(cfg.dir)
+	lastGame := fileToGame(newestFile)
+	return p.setMMR(lastGame)
+}
+
+func (p *player2) getMMR() int64 {
+	return p.getMmrAPI(p.client)
 }
 
 type game struct {
@@ -37,42 +57,49 @@ type toon struct {
 
 func main() {
 	player := setup(cfgToml)
+	player2 := &player2{*player, nil}
 
 	fmt.Printf("Checking the directory '%v' every %v milliseconds for new SC2 replays...\n", cfg.dir, cfg.updateTime)
 
 	if cfg.useAPI {
-		mainAPI(player)
+		mainAPI(player2)
 	} else {
 		mainNoAPI(player)
 	}
 }
 
-func mainAPI(pl *player) {
+func mainAPI(pl *player2) {
 	files, _ := ioutil.ReadDir(cfg.dir)
-	client := getBattleNetClient()
-	pl.setLadderID(client) // 1. make request to ladder summary API. Get ladderID.
+	ID, secret := getCreds()
+	client := getBattleNetClient(ID, secret)
+	pl.client = client
+	pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
 
-	var apiMMR int64
-
-	if pl.profile[cfg.mainToon].ladderID != "" {
-		apiMMR = int64(pl.getMmrAPI(client))
-		if apiMMR != 0 {
-			pl.startMMR = apiMMR
-		}
+	// Allow user to start with a non-empty replay folder
+	if len(files) >= 1 {
+		pl.startMMR = pl.setStartMMR(files)
+		pl.updateAllScores(files)
+		pl.writeMMRdiff(pl.startMMR - pl.MMR)
+		pl.writeWinRate()
+		pl.saveAllFiles()
+	} else {
+		pl.MMR = pl.getMmrAPI(client)
+		pl.startMMR = pl.MMR
+		pl.saveAllFiles()
+		saveResetStats()
 	}
 
-	// set start MMR and current MMR (if starting w/ non-empty folder)
+	pl.run(pl)
+}
+
+func mainNoAPI(pl *player) {
+	files, _ := ioutil.ReadDir(cfg.dir)
+	// Allow user to start with a non-empty replay folder
 	if len(files) >= 1 {
-		oldestFile := getFirstModified(cfg.dir)
-		firstGame := fileToGame(oldestFile)
-		pl.startMMR = pl.setMMR(firstGame)
-
+		pl.startMMR = pl.setStartMMR(files)
 		pl.updateAllScores(files)
-
-		if pl.MMR != 0 {
-			pl.calcMMRdiffAPI(apiMMR)
-		}
-
+		newestFile := getLastModified(cfg.dir)
+		pl.writeMMRdiff(pl.startMMR - pl.getReplayMMR(fileToGame(newestFile)))
 		pl.writeWinRate()
 		pl.saveAllFiles()
 	} else {
@@ -80,6 +107,11 @@ func mainAPI(pl *player) {
 		saveResetStats()
 	}
 
+	pl.run(pl)
+}
+
+func (p *player) run(usr user) {
+	files, _ := ioutil.ReadDir(cfg.dir)
 	fileCnt := numFiles(files)
 
 	for {
@@ -94,72 +126,18 @@ func mainAPI(pl *player) {
 
 		// If you don't want to restart program, you can just delete all replays from directory.
 		if numFiles(files) == 0 {
-			pl.resetPlayer()
-			apiMMR = int64(pl.getMmrAPI(client))
-			pl.startMMR = apiMMR
-			pl.saveAllFiles()
+			p.resetPlayer()
+			p.saveAllFiles()
 			saveResetStats()
 			continue
 		}
 
-		newestFile := getLastModified(cfg.dir)
-		game := fileToGame(newestFile)
-		pl.SetScore(game.players[0].name, game.matchup)
+		game := p.updateScore()
+		usr.getMMR()
 
-		mmr := pl.getMmrAPI(client)
-		pl.MMR = int64(mmr)
-
-		if apiMMR != 0 {
-			pl.calcMMRdiffAPI(int64(mmr))
-		}
-		pl.writeWinRate()
-		pl.saveFile(game.matchup)
-	}
-}
-
-func mainNoAPI(pl *player) {
-	files, _ := ioutil.ReadDir(cfg.dir)
-	// set start MMR and current MMR (if starting w/ non-empty folder)
-	if len(files) >= 1 {
-		pl.startMMR = pl.setStartMMR(files)
-
-		newestFile := getLastModified(cfg.dir)
-		newestGame := fileToGame(newestFile)
-		pl.setMMR(newestGame)
-
-		pl.updateAllScores(files)
-		pl.writeMMRdiff()
-		pl.writeWinRate()
-		pl.saveAllFiles()
-	} else {
-		pl.saveAllFiles()
-		saveResetStats()
-	}
-
-	fileCnt := numFiles(files)
-
-	for {
-		time.Sleep(time.Duration(cfg.updateTime) * time.Millisecond)
-
-		if fileCnt == numFiles(files) {
-			files, _ = ioutil.ReadDir(cfg.dir)
-			continue
-		}
-
-		fileCnt = numFiles(files)
-
-		if numFiles(files) == 0 {
-			pl.resetPlayer()
-			pl.saveAllFiles()
-			saveResetStats()
-			continue
-		}
-
-		game := pl.updateScore()
-		pl.setMMR(game)
-		pl.writeMMRdiff()
-		pl.writeWinRate()
-		pl.saveFile(game.matchup)
+		p.writeMMRdiff(p.startMMR - p.MMR)
+		p.writeWinRate()
+		p.saveFile(game.matchup)
 	}
 }
 
@@ -312,7 +290,7 @@ func scoreToString(ZvX *[2]uint8) string {
 	return str
 }
 
-// sort by modification time ascending
+// Sort by modification time in ascending order
 func sortFilesModTime(files []fs.FileInfo) []os.FileInfo {
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].ModTime().Before(files[j].ModTime())
@@ -326,15 +304,6 @@ func getLastModified(path string) os.FileInfo {
 
 	sort.Slice(files, func(i, j int) bool {
 		return files[j].ModTime().Before(files[i].ModTime())
-	})
-	return files[0]
-}
-
-func getFirstModified(path string) os.FileInfo {
-	files, _ := ioutil.ReadDir(path)
-
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].ModTime().Before(files[j].ModTime())
 	})
 	return files[0]
 }

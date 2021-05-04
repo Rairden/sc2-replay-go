@@ -1,0 +1,43 @@
+{
+  "showCaseEntries": [
+    {
+      "ladderId": "236471",
+      "team": {
+        "localizedGameMode": "1v1",
+        "members": [
+          {
+            "favoriteRace": "terran",
+            "name": "Meister",
+            "playerId": "9471878",
+            "region": 2
+          }
+        ]
+      },
+      "leagueName": "DIAMOND",
+      "localizedDivisionName": "Defiler Kilo",
+      "rank": 1,
+      "wins": 177,
+      "losses": 172
+    }
+  ],
+  "placementMatches": [
+    {
+      "localizedGameMode": "1v1",
+      "members": [
+        {
+          "name": "Meister",
+          "playerId": "9471878",
+          "region": 2
+        }
+      ],
+      "gamesRemaining": 4
+    }
+  ],
+  "allLadderMemberships": [
+    {
+      "ladderId": "236471",
+      "localizedGameMode": "1v1 Diamond",
+      "rank": 1
+    }
+  ]
+}

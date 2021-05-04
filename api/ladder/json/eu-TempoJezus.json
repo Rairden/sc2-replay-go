@@ -1,0 +1,95 @@
+{
+  "ladderTeams": [
+    {
+      "teamMembers": [
+        {
+          "id": "8154818",
+          "realm": 1,
+          "region": 2,
+          "displayName": "TempoJezus",
+          "favoriteRace": "zerg"
+        }
+      ],
+      "previousRank": 0,
+      "points": 359,
+      "wins": 21,
+      "losses": 11,
+      "mmr": 4829,
+      "joinTimestamp": 1618696859
+    },
+    {
+      "teamMembers": [
+        {
+          "id": "2404972",
+          "realm": 2,
+          "region": 2,
+          "displayName": "NeverCheese",
+          "clanTag": "3Dǃ",
+          "favoriteRace": "zerg"
+        }
+      ],
+      "previousRank": 0,
+      "points": 86,
+      "wins": 6,
+      "losses": 2,
+      "mmr": 4969,
+      "joinTimestamp": 1618699292
+    },
+    {
+      "teamMembers": [
+        {
+          "id": "1362365",
+          "realm": 1,
+          "region": 2,
+          "displayName": "Miszu",
+          "clanTag": "Sarmat",
+          "favoriteRace": "zerg"
+        }
+      ],
+      "previousRank": 0,
+      "points": 32,
+      "wins": 2,
+      "losses": 1,
+      "mmr": 5076,
+      "joinTimestamp": 1618696324
+    },
+    {
+      "teamMembers": [
+        {
+          "id": "727565",
+          "realm": 1,
+          "region": 2,
+          "displayName": "BuRny",
+          "clanTag": "Heroes",
+          "favoriteRace": "terran"
+        }
+      ],
+      "previousRank": 0,
+      "points": 0,
+      "wins": 0,
+      "losses": 1,
+      "mmr": 5025,
+      "joinTimestamp": 1618698199
+    }
+  ],
+  "allLadderMemberships": [
+    {
+      "ladderId": "237378",
+      "localizedGameMode": "1v1 Master",
+      "rank": 1
+    }
+  ],
+  "localizedDivision": "Division Infestor Gravity",
+  "league": "master",
+  "currentLadderMembership": {
+    "ladderId": "237378",
+    "localizedGameMode": "1v1 Master"
+  },
+  "ranksAndPools": [
+    {
+      "rank": 1,
+      "mmr": 4829,
+      "bonusPool": 10
+    }
+  ]
+}

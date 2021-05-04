@@ -11,10 +11,25 @@ import (
 	"sc2-replay-go/api/laddersummary"
 )
 
-func getBattleNetClient() *http.Client {
+func getCreds() (string, string) {
+	resp, _ := http.Get(cfg.OAuth2Creds)
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	type credentials struct {
+		ClientID     string `json:"clientID"`
+		ClientSecret string `json:"clientSecret"`
+	}
+
+	var creds credentials
+	json.Unmarshal(body, &creds)
+
+	return creds.ClientID, creds.ClientSecret
+}
+
+func getBattleNetClient(ID, secret string) *http.Client {
 	config := &clientcredentials.Config{
-		ClientID:     cfg.apiClientID,
-		ClientSecret: cfg.apiClientPass,
+		ClientID:     ID,
+		ClientSecret: secret,
 		TokenURL:     "https://us.battle.net/oauth/token",
 	}
 
@@ -23,7 +38,7 @@ func getBattleNetClient() *http.Client {
 	return client
 }
 
-// set ladderID if not set
+// Set ladderID if not set
 func (p *player) setLadderID(client *http.Client) {
 	pl := p.profile[cfg.mainToon]
 	if pl.ladderID == "" {
@@ -35,27 +50,30 @@ func (p *player) setLadderID(client *http.Client) {
 	}
 }
 
+// Returns 0 if data is invalid (nil, 0, -36400), status code != 200, or body is empty.
 // https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
-func (p *player) getMmrAPI(client *http.Client) int {
+func (p *player) getMmrAPI(client *http.Client) int64 {
 	pl := p.profile[cfg.mainToon]
-	ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
-		pl.region, pl.regionID, pl.realmID, pl.profileID, pl.ladderID)
 
-	return getLadder(client, ladderAPI)
+	if pl.ladderID != "" {
+		ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
+			pl.region, pl.regionID, pl.realmID, pl.profileID, pl.ladderID)
+
+		return getLadder(client, ladderAPI)
+	}
+	return 0
 }
 
-func getLadder(client *http.Client, url string) int {
+func getLadder(client *http.Client, url string) int64 {
 	var lad ladder.Struct
 
 	resp, err := client.Get(url)
 	if err != nil {
-		// log.Fatal(err)
 		return 0
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		// log.Fatal(err)
 		return 0
 	}
 
@@ -66,10 +84,10 @@ func getLadder(client *http.Client, url string) int {
 	}
 
 	pools := lad.RanksAndPools[0]
-	return pools.Mmr
+	return int64(pools.Mmr)
 }
 
-// returns the ladderID
+// Returns the ladderID
 func getLadderSummary(client *http.Client, url, race string) string {
 	var ls laddersummary.Struct
 

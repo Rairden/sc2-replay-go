@@ -1,0 +1,113 @@
+{
+  "showCaseEntries": [
+    {
+      "ladderId": "299138",
+      "team": {
+        "localizedGameMode": "2v2",
+        "members": [
+          {
+            "favoriteRace": "protoss",
+            "name": "Lex",
+            "playerId": "9935702",
+            "region": 1
+          },
+          {
+            "favoriteRace": "terran",
+            "name": "FoXx",
+            "playerId": "1504256",
+            "region": 1
+          }
+        ]
+      },
+      "leagueName": "PLATINUM",
+      "localizedDivisionName": "Corsair Indigo ",
+      "rank": 54,
+      "wins": 4,
+      "losses": 3
+    },
+    {
+      "ladderId": "298663",
+      "team": {
+        "localizedGameMode": "1v1",
+        "members": [
+          {
+            "favoriteRace": "terran",
+            "name": "FoXx",
+            "playerId": "1504256",
+            "region": 1
+          }
+        ]
+      },
+      "leagueName": "DIAMOND",
+      "localizedDivisionName": "Selendis Pepper",
+      "rank": 36,
+      "wins": 33,
+      "losses": 41
+    },
+    {
+      "ladderId": "298509",
+      "team": {
+        "localizedGameMode": "2v2",
+        "members": [
+          {
+            "favoriteRace": "protoss",
+            "name": "HarrYTM",
+            "playerId": "11147816",
+            "region": 1
+          },
+          {
+            "favoriteRace": "terran",
+            "name": "FoXx",
+            "playerId": "1504256",
+            "region": 1
+          }
+        ]
+      },
+      "leagueName": "DIAMOND",
+      "localizedDivisionName": "Augustgrad Omicron",
+      "rank": 36,
+      "wins": 5,
+      "losses": 6
+    }
+  ],
+  "placementMatches": [
+    {
+      "localizedGameMode": "Archon",
+      "members": [
+        {
+          "name": "HarrYTM",
+          "playerId": "11147816",
+          "region": 1
+        },
+        {
+          "name": "FoXx",
+          "playerId": "1504256",
+          "region": 1
+        }
+      ],
+      "gamesRemaining": 4
+    }
+  ],
+  "allLadderMemberships": [
+    {
+      "ladderId": "298663",
+      "localizedGameMode": "1v1 Diamond",
+      "rank": 36
+    },
+    {
+      "ladderId": "298509",
+      "localizedGameMode": "2v2 Diamond",
+      "rank": 36
+    },
+    {
+      "ladderId": "299138",
+      "localizedGameMode": "2v2 Platinum",
+      "rank": 54
+    },
+    {
+      "ladderId": "298845",
+      "localizedGameMode": "3v3 Diamond",
+      "rank": 56
+    }
+  ]
+}

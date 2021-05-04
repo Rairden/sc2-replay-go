@@ -1,0 +1,31 @@
+{
+  "showCaseEntries": [
+    {
+      "ladderId": "298683",
+      "team": {
+        "localizedGameMode": "1v1",
+        "members": [
+          {
+            "favoriteRace": "zerg",
+            "name": "Gixxasaurus",
+            "playerId": "1331332",
+            "region": 1
+          }
+        ]
+      },
+      "leagueName": "DIAMOND",
+      "localizedDivisionName": "Ramsey Victor",
+      "rank": 24,
+      "wins": 27,
+      "losses": 25
+    }
+  ],
+  "placementMatches": [],
+  "allLadderMemberships": [
+    {
+      "ladderId": "298683",
+      "localizedGameMode": "1v1 Diamond",
+      "rank": 24
+    }
+  ]
+}
