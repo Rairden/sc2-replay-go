@@ -29,9 +29,10 @@ The correct output for my record here is:
  1 - 2
  0 - 3
  1 - 1
+ 2 - 6
 ```
 
-because the first legal MMR is the 3rd game at 3049, and last game is 3045. So -4 MMR.
+2 - 6 is total win/loss. Because the first legal MMR is the 3rd game at 3049, and last game is 3045. So -4 MMR.
 
 My SC2 player names and ID's are:
 

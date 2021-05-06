@@ -11,9 +11,19 @@ import (
 	"sc2-replay-go/api/laddersummary"
 )
 
-func getCreds() (string, string) {
+func getCredentials() error {
 	resp, _ := http.Get(cfg.OAuth2Creds)
 	body, _ := ioutil.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 || resp.ContentLength == 0 {
+		err := fmt.Errorf("could not connect to web server\n" +
+			"\tStatus Code: %v\n" +
+			"\tContent-Length: %v\n\n" +
+			"You could register your own Client ID for free at " +
+			"https://develop.battle.net/documentation/guides/getting-started\n\n" +
+			"Then put the client ID/pass in the cfg.toml file.", resp.StatusCode, resp.ContentLength)
+		return err
+	}
 
 	type credentials struct {
 		ClientID     string `json:"clientID"`
@@ -23,7 +33,9 @@ func getCreds() (string, string) {
 	var creds credentials
 	json.Unmarshal(body, &creds)
 
-	return creds.ClientID, creds.ClientSecret
+	cfg.clientID = creds.ClientID
+	cfg.clientSecret = creds.ClientSecret
+	return nil
 }
 
 func getBattleNetClient(ID, secret string) *http.Client {
@@ -93,14 +105,11 @@ func getLadderSummary(client *http.Client, url, race string) string {
 
 	resp, err := client.Get(url)
 	if err != nil {
-		// log.Fatal(err)
 		return ""
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	fmt.Println()
 	if err != nil {
-		// log.Fatal(err)
 		return ""
 	}
 
@@ -115,8 +124,6 @@ func getLadderSummary(client *http.Client, url, race string) string {
 		if e.Team.LocalizedGameMode == "1v1" {
 			player1 := e.Team.Members[0]
 			if player1.FavoriteRace == race {
-				// Consider taking name from here as Details has garbage: github.com/icza/sc2prot/rep.Details  --> "&lt;QOSQO&gt;FoXx"
-				// players.profile[cfg.mainToon].name = player1.Name
 				return e.LadderID
 			}
 		}

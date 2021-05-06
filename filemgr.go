@@ -12,16 +12,17 @@ import (
 )
 
 var (
-	_, r, _, _ = runtime.Caller(0) // linux (testing)
-	s, _       = os.Executable()   // win10
-	currDir    = path.Dir(s) + filepath.Join("/")
-	cfgToml    = currDir + "cfg.toml"
-	zvpTxt     = currDir + "ZvP.txt"
-	zvtTxt     = currDir + "ZvT.txt"
-	zvzTxt     = currDir + "ZvZ.txt"
-	mmrDiffTxt = currDir + "MMR-diff.txt"
-	winrateTxt = currDir + "winrate.txt"
-	cfg        settings
+	_, r, _, _      = runtime.Caller(0) // linux (testing)
+	s, _            = os.Executable()   // win10
+	currDir         = path.Dir(s) + filepath.Join("/")
+	cfgToml         = currDir + "cfg.toml"
+	zvpTxt          = currDir + "ZvP.txt"
+	zvtTxt          = currDir + "ZvT.txt"
+	zvzTxt          = currDir + "ZvZ.txt"
+	mmrDiffTxt      = currDir + "MMR-diff.txt"
+	winrateTxt      = currDir + "winrate.txt"
+	totalWinLossTxt = currDir + "totalWinLoss.txt"
+	cfg             settings
 )
 
 // the cfg.toml file
@@ -30,12 +31,14 @@ type settings struct {
 	updateTime    int64
 	useAPI        bool
 	OAuth2Creds   string
+	clientID      string
+	clientSecret  string
 }
 
 // absolutePath is your cfg.toml file
 func setup(absolutePath string) *player {
 	player := &player{
-		[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
+		[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
 		0, 0,
 		make(map[string]*profile),
 	}
@@ -48,6 +51,9 @@ func setup(absolutePath string) *player {
 		useAPI := config.Get("settings.useAPI").(bool)
 		updateTime := config.Get("settings.updateTime").(int64)
 		OAuth2Creds := config.Get("settings.OAuth2Creds").(string)
+
+		clientID := config.Get("settings.clientID").(string)
+		clientSecret := config.Get("settings.clientSecret").(string)
 
 		updateTime = setUpdateTime(updateTime)
 
@@ -72,7 +78,7 @@ func setup(absolutePath string) *player {
 				region,
 			}
 
-			player.profile[name] = profile
+			player.profile[profileID] = profile
 		}
 
 		cfg = settings{
@@ -80,6 +86,8 @@ func setup(absolutePath string) *player {
 			updateTime,
 			useAPI,
 			OAuth2Creds,
+			clientID,
+			clientSecret,
 		}
 	} else {
 		writeData(cfgToml, myToml)
@@ -134,17 +142,16 @@ func setUpdateTime(t int64) int64 {
 }
 
 var myToml = `#     name - Put a comma-separated list of your SC2 accounts like in the example (url, name, race).
-# mainToon - You must choose only one name to use.
+# mainToon - Choose only one profileID to use (only used if useAPI = true).
 #      dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 
 [account]
 name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ] ]
 
 # name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ],
-#          [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ],
-#          [ "https://starcraft2.com/en-gb/profile/1/1/6901550", "PREAHLANY", "zerg"] ]
+#          [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ] ]
 
-mainToon = "Gixxasaurus"
+mainToon = "1331332"
 
 [directory]
 dir = "/home/erik/scratch/replays/"
@@ -153,6 +160,8 @@ dir = "/home/erik/scratch/replays/"
 
 [settings]
 updateTime = 1000
-useAPI = false
+useAPI = true
 OAuth2Creds = "http://108.61.119.116"
+clientID = ""
+clientSecret = ""
 `

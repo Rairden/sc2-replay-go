@@ -5,13 +5,13 @@ import "testing"
 func Test_createMatchup(t *testing.T) {
 	tests := []struct {
 		input string
-		want  uint8
+		want  string
 	}{
-		{"PvZ", ZvP},
-		{"TvZ", ZvT},
-		{"ZvP", ZvP},
-		{"ZvT", ZvT},
-		{"ZvZ", ZvZ},
+		{"PvZ", "ZvP"},
+		{"TvZ", "ZvT"},
+		{"ZvP", "ZvP"},
+		{"ZvT", "ZvT"},
+		{"ZvZ", "ZvZ"},
 	}
 
 	for _, test := range tests {

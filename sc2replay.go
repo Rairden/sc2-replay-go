@@ -13,9 +13,9 @@ import (
 )
 
 type player struct {
-	ZvP, ZvT, ZvZ [2]uint8
-	startMMR, MMR int64
-	profile       map[string]*profile
+	ZvP, ZvT, ZvZ, total [2]uint8
+	startMMR, MMR        int64
+	profile              map[string]*profile
 }
 
 type player2 struct {
@@ -49,7 +49,7 @@ type game struct {
 }
 
 type toon struct {
-	profileID int64
+	profileID string
 	name      string
 	mmr       int64
 	result    string
@@ -59,7 +59,7 @@ func main() {
 	player := setup(cfgToml)
 	player2 := &player2{*player, nil}
 
-	fmt.Printf("Checking the directory '%v' every %v milliseconds for new SC2 replays...\n", cfg.dir, cfg.updateTime)
+	fmt.Printf("Checking the directory '%v' \nevery %v ms for new SC2 replays...\n\n", cfg.dir, cfg.updateTime)
 
 	if cfg.useAPI {
 		mainAPI(player2)
@@ -69,9 +69,17 @@ func main() {
 }
 
 func mainAPI(pl *player2) {
-	files, _ := ioutil.ReadDir(cfg.dir)
-	ID, secret := getCreds()
-	client := getBattleNetClient(ID, secret)
+	files, _ := ioutil.ReadDir(cfg.dir) // TODO: replace with os.ReadDir
+
+	if cfg.clientID == "" {
+		err := getCredentials()
+		if err != nil {
+			fmt.Println(err)
+			mainNoAPI(&pl.player)
+		}
+	}
+
+	client := getBattleNetClient(cfg.clientID, cfg.clientSecret)
 	pl.client = client
 	pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
 
@@ -81,19 +89,19 @@ func mainAPI(pl *player2) {
 		pl.updateAllScores(files)
 		pl.writeMMRdiff(pl.startMMR - pl.MMR)
 		pl.writeWinRate()
-		pl.saveAllFiles()
 	} else {
 		pl.MMR = pl.getMmrAPI(client)
 		pl.startMMR = pl.MMR
-		pl.saveAllFiles()
 		saveResetStats()
 	}
 
+	pl.saveAllFiles()
 	pl.run(pl)
 }
 
 func mainNoAPI(pl *player) {
 	files, _ := ioutil.ReadDir(cfg.dir)
+
 	// Allow user to start with a non-empty replay folder
 	if len(files) >= 1 {
 		pl.startMMR = pl.setStartMMR(files)
@@ -101,24 +109,23 @@ func mainNoAPI(pl *player) {
 		newestFile := getLastModified(cfg.dir)
 		pl.writeMMRdiff(pl.startMMR - pl.getReplayMMR(fileToGame(newestFile)))
 		pl.writeWinRate()
-		pl.saveAllFiles()
 	} else {
-		pl.saveAllFiles()
 		saveResetStats()
 	}
 
+	pl.saveAllFiles()
 	pl.run(pl)
 }
 
 func (p *player) run(usr user) {
-	files, _ := ioutil.ReadDir(cfg.dir)
+	files, _ := os.ReadDir(cfg.dir)
 	fileCnt := numFiles(files)
 
 	for {
 		time.Sleep(time.Duration(cfg.updateTime) * time.Millisecond)
 
 		if fileCnt == numFiles(files) {
-			files, _ = ioutil.ReadDir(cfg.dir)
+			files, _ = os.ReadDir(cfg.dir)
 			continue
 		}
 
@@ -129,15 +136,19 @@ func (p *player) run(usr user) {
 			p.resetPlayer()
 			p.saveAllFiles()
 			saveResetStats()
+			p.startMMR = usr.getMMR()
 			continue
 		}
 
 		game := p.updateScore()
-		usr.getMMR()
+		p.MMR = usr.getMMR()
 
 		p.writeMMRdiff(p.startMMR - p.MMR)
 		p.writeWinRate()
+		p.setTotalWinLoss()
+		p.writeTotalWinLoss()
 		p.saveFile(game.matchup)
+		p.printResults(game)
 	}
 }
 
@@ -169,7 +180,7 @@ func getGame(r *rep.Rep) game {
 
 	for i := 0; i < 2; i++ {
 		p1 := toon{
-			players[i].Toon.ID(),
+			strconv.FormatInt(players[i].Toon.ID(), 10),
 			userInitDatas[i].Name(),
 			userInitDatas[i].MMR(),
 			players[i].Result().String(),
@@ -182,7 +193,7 @@ func getGame(r *rep.Rep) game {
 
 func (p *player) printResults(g game) {
 	for _, pl := range g.players {
-		if _, ok := p.profile[pl.name]; ok {
+		if _, ok := p.profile[pl.profileID]; ok {
 			fmt.Printf("%s %-11s %6v %s\n", g.matchup, pl.name, pl.mmr, pl.result)
 			return
 		}
@@ -202,39 +213,45 @@ func getMatchup(mu string) string {
 	return ""
 }
 
-// FIXME: consider changing this to use your toon and not grabbing winner.
+func getWinner(g game) toon {
+	if g.players[0].result == "Victory" {
+		return g.players[0]
+	}
+	return g.players[1]
+}
+
 func (p *player) updateAllScores(files []os.FileInfo) {
 	for _, file := range files {
 		g := fileToGame(file)
-		if g.players[0].result == "Victory" {
-			p.SetScore(g.players[0].name, g.matchup)
-		} else {
-			p.SetScore(g.players[1].name, g.matchup)
-		}
+		winner := getWinner(g)
+		p.setScore(winner.profileID, g.matchup)
 	}
+	p.setTotalWinLoss()
+	p.writeTotalWinLoss()
 }
 
 func (p *player) updateScore() game {
 	f := getLastModified(cfg.dir)
 	g := fileToGame(f)
-	p.SetScore(g.players[0].name, g.matchup)
+	winner := getWinner(g)
+	p.setScore(winner.profileID, g.matchup)
 	return g
 }
 
-// SetScore The name can be winner or loser.
-func (p *player) SetScore(name, matchup string) {
+// setScore The ID must be the winner.
+func (p *player) setScore(ID, matchup string) {
 	switch matchup {
 	case "ZvP":
-		p.incScore(name, &p.ZvP)
+		p.incScore(ID, &p.ZvP)
 	case "ZvT":
-		p.incScore(name, &p.ZvT)
+		p.incScore(ID, &p.ZvT)
 	case "ZvZ":
-		p.incScore(name, &p.ZvZ)
+		p.incScore(ID, &p.ZvZ)
 	}
 }
 
-func (p *player) incScore(name string, ZvX *[2]uint8) {
-	isYou := p.isMyName(name)
+func (p *player) incScore(ID string, ZvX *[2]uint8) {
+	isYou := p.isMyID(ID)
 
 	if isYou {
 		ZvX[0]++
@@ -247,11 +264,12 @@ func (p *player) resetPlayer() {
 	p.ZvP = [2]uint8{0, 0}
 	p.ZvT = [2]uint8{0, 0}
 	p.ZvZ = [2]uint8{0, 0}
+	p.total = [2]uint8{0, 0}
 	p.MMR, p.startMMR = 0, 0
 }
 
-func (p *player) isMyName(name string) bool {
-	if _, ok := p.profile[name]; ok {
+func (p *player) isMyID(ID string) bool {
+	if _, ok := p.profile[ID]; ok {
 		return true
 	}
 	return false
@@ -272,11 +290,13 @@ func (p *player) saveAllFiles() {
 	writeFile(zvpTxt, &p.ZvP)
 	writeFile(zvtTxt, &p.ZvT)
 	writeFile(zvzTxt, &p.ZvZ)
+	writeFile(totalWinLossTxt, &p.total)
 }
 
 func saveResetStats() {
 	writeData(mmrDiffTxt, "+0 MMR\n")
 	writeData(winrateTxt, "0%\n")
+	writeData(totalWinLossTxt, " 0 - 0\n")
 }
 
 func writeFile(fullPath string, mu *[2]uint8) {
@@ -308,7 +328,7 @@ func getLastModified(path string) os.FileInfo {
 	return files[0]
 }
 
-func numFiles(files []os.FileInfo) int {
+func numFiles(files []os.DirEntry) int {
 	return len(files)
 }
 
