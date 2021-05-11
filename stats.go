@@ -7,18 +7,17 @@ import (
 	"os"
 )
 
+// getReplayMMR sets the player MMR and returns the value. If there's an error returns 0.
 func (p *player) getReplayMMR(g game) int64 {
+	var MMR int64
+
 	for _, pl := range g.players {
 		if _, ok := p.profile[pl.profileID]; ok {
-			return pl.mmr
+			MMR = pl.mmr
 		}
 	}
-	return 0
-}
 
-func (p *player) setMMR(g game) int64 {
 	files, _ := os.ReadDir(cfg.dir)
-	MMR := p.getReplayMMR(g)
 
 	if MMR > 0 {
 		p.MMR = MMR
@@ -30,17 +29,19 @@ func (p *player) setMMR(g game) int64 {
 	return 0
 }
 
+// setStartMMR returns 0 if the data is invalid (nil, 0, -36400) or vs the A.I.
 func (p *player) setStartMMR(files []fs.FileInfo) int64 {
 	files = sortFilesModTime(files)
 
 	for _, file := range files {
 		game := fileToGame(file)
-		p.startMMR = p.setMMR(game)
+		MMR := p.getReplayMMR(game)
 
-		if p.startMMR <= 0 {
+		if MMR <= 0 || !game.isCompetitive {
 			continue
 		}
-		return p.MMR
+		p.startMMR = MMR
+		return MMR
 	}
 
 	return 0

@@ -62,7 +62,7 @@ func (p *player) setLadderID(client *http.Client) {
 	}
 }
 
-// Returns 0 if data is invalid (nil, 0, -36400), status code != 200, or body is empty.
+// getMmrAPI returns 0 if the data is invalid (nil, 0, -36400), status code != 200, or the body is empty.
 // https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
 func (p *player) getMmrAPI(client *http.Client) int64 {
 	pl := p.profile[cfg.mainToon]

@@ -40,7 +40,7 @@ func (p *player) getMMR() int64 {
 		return 0
 	}
 	lastGame := fileToGame(newestFile)
-	return p.setMMR(lastGame)
+	return p.getReplayMMR(lastGame)
 }
 
 func (p *player2) getMMR() int64 {
@@ -109,11 +109,14 @@ func mainNoAPI(pl *player) {
 	files, _ := ioutil.ReadDir(cfg.dir)
 
 	// Allow user to start with a non-empty replay folder
-	if len(files) >= 1 {
+	if len(files) > 0 {
 		pl.startMMR = pl.setStartMMR(files)
 		pl.updateAllScores(files)
 		newestFile, _ := getLastModified(cfg.dir)
-		pl.writeMMRdiff(pl.startMMR - pl.getReplayMMR(fileToGame(newestFile)))
+		mmr := pl.getReplayMMR(fileToGame(newestFile))
+		if pl.startMMR > 0 && mmr > 0 {
+			pl.writeMMRdiff(pl.startMMR - mmr)
+		}
 		pl.writeWinRate()
 	} else {
 		saveResetStats()
@@ -126,6 +129,7 @@ func mainNoAPI(pl *player) {
 func (p *player) run(usr user) {
 	files, _ := os.ReadDir(cfg.dir)
 	fileCnt := numFiles(files)
+	fmt.Printf("Start MMR: %v\n", p.startMMR)
 
 	for {
 		time.Sleep(time.Duration(cfg.updateTime) * time.Millisecond)
