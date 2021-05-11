@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/icza/s2prot/rep"
 	"io/fs"
@@ -34,7 +35,10 @@ type user interface {
 }
 
 func (p *player) getMMR() int64 {
-	newestFile := getLastModified(cfg.dir)
+	newestFile, err := getLastModified(cfg.dir)
+	if err != nil {
+		return 0
+	}
 	lastGame := fileToGame(newestFile)
 	return p.setMMR(lastGame)
 }
@@ -108,7 +112,7 @@ func mainNoAPI(pl *player) {
 	if len(files) >= 1 {
 		pl.startMMR = pl.setStartMMR(files)
 		pl.updateAllScores(files)
-		newestFile := getLastModified(cfg.dir)
+		newestFile, _ := getLastModified(cfg.dir)
 		pl.writeMMRdiff(pl.startMMR - pl.getReplayMMR(fileToGame(newestFile)))
 		pl.writeWinRate()
 	} else {
@@ -134,7 +138,7 @@ func (p *player) run(usr user) {
 		fileCnt = numFiles(files)
 
 		// If you don't want to restart program, you can just delete all replays from directory.
-		if numFiles(files) == 0 {
+		if fileCnt == 0 {
 			p.resetPlayer()
 			p.saveAllFiles()
 			saveResetStats()
@@ -209,16 +213,16 @@ func (p *player) printResults(g game) {
 }
 
 func getMatchup(mu string) string {
-	if mu == "PvZ" || mu == "ZvP" {
+	switch mu {
+	case "ZvP", "PvZ":
 		return "ZvP"
-	}
-	if mu == "TvZ" || mu == "ZvT" {
+	case "ZvT", "TvZ":
 		return "ZvT"
-	}
-	if mu == "ZvZ" {
+	case "ZvZ":
 		return "ZvZ"
+	default:
+		return ""
 	}
-	return ""
 }
 
 func getWinner(g game) toon {
@@ -242,7 +246,7 @@ func (p *player) updateAllScores(files []os.FileInfo) {
 }
 
 func (p *player) updateScore() game {
-	f := getLastModified(cfg.dir)
+	f, _ := getLastModified(cfg.dir)
 	g := fileToGame(f)
 	if !g.isCompetitive {
 		return g
@@ -333,13 +337,16 @@ func sortFilesModTime(files []fs.FileInfo) []os.FileInfo {
 }
 
 // using path is more expensive than a []fs.FileInfo param, but I need to refresh dir
-func getLastModified(path string) os.FileInfo {
+func getLastModified(path string) (os.FileInfo, error) {
 	files, _ := ioutil.ReadDir(path)
+	if len(files) == 0 {
+		return nil, errors.New("error: no files")
+	}
 
 	sort.Slice(files, func(i, j int) bool {
 		return files[j].ModTime().Before(files[i].ModTime())
 	})
-	return files[0]
+	return files[0], nil
 }
 
 func numFiles(files []os.DirEntry) int {
