@@ -43,9 +43,11 @@ func (p *player2) getMMR() int64 {
 	return p.getMmrAPI(p.client)
 }
 
+// Both ranked/unranked has competitive = true, while an A.I. game is false.
 type game struct {
-	players []toon
-	matchup string
+	players       []toon
+	matchup       string
+	isCompetitive bool
 }
 
 type toon struct {
@@ -141,6 +143,9 @@ func (p *player) run(usr user) {
 		}
 
 		game := p.updateScore()
+		if !game.isCompetitive {
+			continue
+		}
 		p.MMR = usr.getMMR()
 
 		p.writeMMRdiff(p.startMMR - p.MMR)
@@ -175,6 +180,9 @@ func getGame(r *rep.Rep) game {
 	initData := getInitData(r)
 	userInitDatas := initData.UserInitDatas
 
+	// Only InitData shows it's an A.I. (computer) match at 'x.InitData.Struct.gameDescription.gameOptions.competitive'
+	isCompetitive := initData.GameDescription.GameOptions.CompetitiveOrRanked()
+
 	mu := getMatchup(Matchup)
 	var toons []toon
 
@@ -188,7 +196,7 @@ func getGame(r *rep.Rep) game {
 		toons = append(toons, p1)
 	}
 
-	return game{toons, mu}
+	return game{toons, mu, isCompetitive}
 }
 
 func (p *player) printResults(g game) {
@@ -223,6 +231,9 @@ func getWinner(g game) toon {
 func (p *player) updateAllScores(files []os.FileInfo) {
 	for _, file := range files {
 		g := fileToGame(file)
+		if !g.isCompetitive {
+			continue
+		}
 		winner := getWinner(g)
 		p.setScore(winner.profileID, g.matchup)
 	}
@@ -233,6 +244,9 @@ func (p *player) updateAllScores(files []os.FileInfo) {
 func (p *player) updateScore() game {
 	f := getLastModified(cfg.dir)
 	g := fileToGame(f)
+	if !g.isCompetitive {
+		return g
+	}
 	winner := getWinner(g)
 	p.setScore(winner.profileID, g.matchup)
 	return g
