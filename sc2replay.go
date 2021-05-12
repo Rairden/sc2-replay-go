@@ -90,10 +90,10 @@ func mainAPI(pl *player2) {
 	pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
 
 	// Allow user to start with a non-empty replay folder
-	if len(files) >= 1 {
-		pl.startMMR = pl.setStartMMR(files)
+	if len(files) > 0 {
+		pl.setStartMMR(files)
 		pl.updateAllScores(files)
-		pl.writeMMRdiff(pl.startMMR - pl.MMR)
+		pl.writeMMRdiff(pl.startMMR, pl.MMR)
 		pl.writeWinRate()
 	} else {
 		pl.MMR = pl.getMmrAPI(client)
@@ -110,13 +110,11 @@ func mainNoAPI(pl *player) {
 
 	// Allow user to start with a non-empty replay folder
 	if len(files) > 0 {
-		pl.startMMR = pl.setStartMMR(files)
+		pl.setStartMMR(files)
 		pl.updateAllScores(files)
 		newestFile, _ := getLastModified(cfg.dir)
 		mmr := pl.getReplayMMR(fileToGame(newestFile))
-		if pl.startMMR > 0 && mmr > 0 {
-			pl.writeMMRdiff(pl.startMMR - mmr)
-		}
+		pl.writeMMRdiff(pl.startMMR, mmr)
 		pl.writeWinRate()
 	} else {
 		saveResetStats()
@@ -129,13 +127,14 @@ func mainNoAPI(pl *player) {
 func (p *player) run(usr user) {
 	files, _ := os.ReadDir(cfg.dir)
 	fileCnt := numFiles(files)
-	fmt.Printf("Start MMR: %v\n", p.startMMR)
+	fmt.Printf("Start MMR: %11v\n", p.startMMR)
 
 	for {
 		time.Sleep(time.Duration(cfg.updateTime) * time.Millisecond)
 
-		if fileCnt == numFiles(files) {
+		if nf := numFiles(files); nf <= fileCnt {
 			files, _ = os.ReadDir(cfg.dir)
+			fileCnt = nf
 			continue
 		}
 
@@ -154,14 +153,20 @@ func (p *player) run(usr user) {
 		if !game.isCompetitive {
 			continue
 		}
-		p.MMR = usr.getMMR()
 
-		p.writeMMRdiff(p.startMMR - p.MMR)
 		p.writeWinRate()
 		p.setTotalWinLoss()
 		p.writeTotalWinLoss()
 		p.saveFile(game.matchup)
 		p.printResults(game)
+
+		if fileCnt == 1 || p.startMMR == 0 {
+			files, _ := ioutil.ReadDir(cfg.dir)
+			p.setStartMMR(files)
+		}
+
+		p.MMR = usr.getMMR()
+		p.writeMMRdiff(p.startMMR, p.MMR)
 	}
 }
 

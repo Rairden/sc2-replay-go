@@ -7,9 +7,14 @@ import (
 	"os"
 )
 
-// getReplayMMR sets the player MMR and returns the value. If there's an error returns 0.
+// getReplayMMR sets the player MMR and returns the value. And returns 0 if you haven't
+// played in a long time, it's your first 2-3 placement matches, or an A.I. replay.
 func (p *player) getReplayMMR(g game) int64 {
 	var MMR int64
+
+	if !g.isCompetitive {
+		return 0
+	}
 
 	for _, pl := range g.players {
 		if _, ok := p.profile[pl.profileID]; ok {
@@ -20,12 +25,13 @@ func (p *player) getReplayMMR(g game) int64 {
 	files, _ := os.ReadDir(cfg.dir)
 
 	if MMR > 0 {
-		p.MMR = MMR
 		if len(files) == 1 {
 			p.startMMR = MMR
 		}
+		p.MMR = MMR
 		return MMR
 	}
+	p.MMR = 0
 	return 0
 }
 
@@ -43,7 +49,7 @@ func (p *player) setStartMMR(files []fs.FileInfo) int64 {
 		p.startMMR = MMR
 		return MMR
 	}
-
+	p.startMMR = 0
 	return 0
 }
 
@@ -55,7 +61,7 @@ func writeData(fullPath, data string) {
 	file.Sync()
 }
 
-func (p *player) writeMMRdiff(diff int64) {
+func (p *player) writeMMRdiff(start, end int64) {
 	files, _ := os.ReadDir(cfg.dir)
 
 	if !cfg.useAPI {
@@ -65,14 +71,19 @@ func (p *player) writeMMRdiff(diff int64) {
 		}
 	}
 
-	var result string
-	if diff <= 0 {
-		diff *= -1
-		result = fmt.Sprintf("+%d MMR\n", diff)
+	if p.startMMR > 0 && end > 0 {
+		diff := start - end
+		var result string
+		if diff <= 0 {
+			diff *= -1
+			result = fmt.Sprintf("+%d MMR\n", diff)
+		} else {
+			result = fmt.Sprintf("-%d MMR\n", diff)
+		}
+		writeData(mmrDiffTxt, result)
 	} else {
-		result = fmt.Sprintf("-%d MMR\n", diff)
+		writeData(mmrDiffTxt, "+0 MMR\n")
 	}
-	writeData(mmrDiffTxt, result)
 }
 
 func (p *player) writeWinRate() {
