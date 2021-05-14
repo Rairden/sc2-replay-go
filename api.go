@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"golang.org/x/oauth2/clientcredentials"
 	"io/ioutil"
@@ -11,8 +12,29 @@ import (
 	"sc2-replay-go/api/laddersummary"
 )
 
+type BattlenetError struct {
+	resp       *http.Response
+	body       []byte
+	entries    []laddersummary.ShowCaseEntries
+	ranksPools []ladder.RanksAndPools
+}
+
+func (b *BattlenetError) Error() string {
+	return fmt.Sprintf("a battlenet error occured:\n" +
+		"\tStatus Code: %v\n" +
+		"\tContent-Length: %v\n" +
+		"\tLength of body: %v\n" +
+		"\tLength of ShowCaseEntries: %v\n" +
+		"\tLength of RanksAndPools: %v\n",
+		b.resp.StatusCode, b.resp.ContentLength, len(b.body), len(b.entries), len(b.ranksPools))
+}
+
 func getCredentials() error {
-	resp, _ := http.Get(cfg.OAuth2Creds)
+	resp, err := http.Get(cfg.OAuth2Creds)
+	if err != nil {
+		err := fmt.Errorf("couldn't connect to website. Check the OAuth2Creds URL in cfg.toml.\n\t%v", err)
+		return err
+	}
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 || resp.ContentLength == 0 {
@@ -20,7 +42,7 @@ func getCredentials() error {
 			"\tStatus Code: %v\n" +
 			"\tContent-Length: %v\n\n" +
 			"You could register your own Client ID for free at " +
-			"https://develop.battle.net/documentation/guides/getting-started\n\n" +
+			"https://develop.battle.net/documentation/guides/getting-started\n" +
 			"Then put the client ID/pass in the cfg.toml file.", resp.StatusCode, resp.ContentLength)
 		return err
 	}
@@ -51,20 +73,24 @@ func getBattleNetClient(ID, secret string) *http.Client {
 }
 
 // Set ladderID if not set
-func (p *player) setLadderID(client *http.Client) {
+func (p *player) setLadderID(client *http.Client) error {
 	pl := p.profile[cfg.mainToon]
 	if pl.ladderID == "" {
 		ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
 			pl.region, pl.regionID, pl.realmID, pl.profileID)
 
-		apiLadderID := getLadderSummary(client, ladderSummaryAPI, pl.race)
+		apiLadderID, err := getLadderSummary(client, ladderSummaryAPI, pl.race)
+		if err != nil {
+			return err
+		}
 		pl.ladderID = apiLadderID
 	}
+	return nil
 }
 
 // getMmrAPI returns 0 if the data is invalid (nil, 0, -36400), status code != 200, or the body is empty.
 // https://us.api.blizzard.com/sc2/profile/1/1/1331332/ladder/298683?locale=en_US&access_token=xxx
-func (p *player) getMmrAPI(client *http.Client) int64 {
+func (p *player) getMmrAPI(client *http.Client) (int64, error) {
 	pl := p.profile[cfg.mainToon]
 
 	if pl.ladderID != "" {
@@ -73,60 +99,63 @@ func (p *player) getMmrAPI(client *http.Client) int64 {
 
 		return getLadder(client, ladderAPI)
 	}
-	return 0
+	return 0, errors.New("error: ladderID needs to be set first")
 }
 
-func getLadder(client *http.Client, url string) int64 {
+func getLadder(client *http.Client, url string) (int64, error) {
 	var lad ladder.Struct
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 
 	json.Unmarshal(body, &lad)
 
 	if resp.StatusCode != 200 || len(body) == 0 || len(lad.RanksAndPools) == 0 {
-		return 0
+		return 0, &BattlenetError{resp, body, nil, lad.RanksAndPools}
 	}
 
 	pools := lad.RanksAndPools[0]
-	return int64(pools.Mmr)
+	return int64(pools.Mmr), nil
 }
 
-// Returns the ladderID
-func getLadderSummary(client *http.Client, url, race string) string {
+// getLadderSummary returns ladderID. See file '/api/laddersummary/json/eu-mamont.json' for a good example.
+// mamont plays 1v1 w/ two races (zerg, terran). He has a distinct ladderID for each 1v1 race.
+// range over x.showCaseEntries. Look at all the "1v1" and match the race from the cfg.toml file.
+func getLadderSummary(client *http.Client, url, race string) (string, error) {
 	var ls laddersummary.Struct
 
 	resp, err := client.Get(url)
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	json.Unmarshal(body, &ls)
 	entries := ls.ShowCaseEntries
 
 	if resp.StatusCode != 200 || len(body) == 0 || len(entries) == 0 {
-		return ""
+		return "", &BattlenetError{resp, body, entries, nil}
 	}
 
 	for _, e := range entries {
 		if e.Team.LocalizedGameMode == "1v1" {
 			player1 := e.Team.Members[0]
 			if player1.FavoriteRace == race {
-				return e.LadderID
+				return e.LadderID, nil
 			}
 		}
 	}
-	return ""
+	return "", errors.New("error: Could not find ladderID for that race. Make sure your cfg.toml file\n" +
+		"\thas the correct race for name= and mainToon=")
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/icza/s2prot/rep"
 	"io/fs"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -31,19 +32,19 @@ type profile struct {
 }
 
 type user interface {
-	getMMR() int64
+	getMMR() (int64, error)
 }
 
-func (p *player) getMMR() int64 {
+func (p *player) getMMR() (int64, error) {
 	newestFile, err := getLastModified(cfg.dir)
 	if err != nil {
-		return 0
+		return 0, nil
 	}
 	lastGame := fileToGame(newestFile)
 	return p.getReplayMMR(lastGame)
 }
 
-func (p *player2) getMMR() int64 {
+func (p *player2) getMMR() (int64, error) {
 	return p.getMmrAPI(p.client)
 }
 
@@ -80,14 +81,18 @@ func mainAPI(pl *player2) {
 	if cfg.clientID == "" {
 		err := getCredentials()
 		if err != nil {
-			fmt.Println(err)
+			redirectError(err)
 			mainNoAPI(&pl.player)
 		}
 	}
 
 	client := getBattleNetClient(cfg.clientID, cfg.clientSecret)
 	pl.client = client
-	pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
+	err := pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
+	if err != nil {
+		redirectError(err)
+		mainNoAPI(&pl.player)
+	}
 
 	// Allow user to start with a non-empty replay folder
 	if len(files) > 0 {
@@ -96,8 +101,13 @@ func mainAPI(pl *player2) {
 		pl.writeMMRdiff(pl.startMMR, pl.MMR)
 		pl.writeWinRate()
 	} else {
-		pl.MMR = pl.getMmrAPI(client)
-		pl.startMMR = pl.MMR
+		mmr, err := pl.getMmrAPI(client)
+		if err != nil {
+			redirectError(err)
+			mainNoAPI(&pl.player)
+		}
+		pl.startMMR = mmr
+		pl.MMR = mmr
 		saveResetStats()
 	}
 
@@ -113,7 +123,7 @@ func mainNoAPI(pl *player) {
 		pl.setStartMMR(files)
 		pl.updateAllScores(files)
 		newestFile, _ := getLastModified(cfg.dir)
-		mmr := pl.getReplayMMR(fileToGame(newestFile))
+		mmr, _ := pl.getReplayMMR(fileToGame(newestFile))
 		pl.writeMMRdiff(pl.startMMR, mmr)
 		pl.writeWinRate()
 	} else {
@@ -145,7 +155,7 @@ func (p *player) run(usr user) {
 			p.resetPlayer()
 			p.saveAllFiles()
 			saveResetStats()
-			p.startMMR = usr.getMMR()
+			p.startMMR, _ = usr.getMMR()
 			continue
 		}
 
@@ -165,7 +175,7 @@ func (p *player) run(usr user) {
 			p.setStartMMR(files)
 		}
 
-		p.MMR = usr.getMMR()
+		p.MMR, _ = usr.getMMR()
 		p.writeMMRdiff(p.startMMR, p.MMR)
 	}
 }
@@ -366,4 +376,12 @@ func check(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func redirectError(err error) {
+	redirectErr := "Redirecting program to not pull MMR from battlenet API.\n" +
+		"MMR will be obtained from your local replay file now."
+	fmt.Println(redirectErr)
+	fmt.Println()
+	log.Println(err)
 }

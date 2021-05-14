@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/pelletier/go-toml"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,6 +23,8 @@ var (
 	mmrDiffTxt      = currDir + "MMR-diff.txt"
 	winrateTxt      = currDir + "winrate.txt"
 	totalWinLossTxt = currDir + "totalWinLoss.txt"
+	logDir	 		= currDir + "log" + filepath.Join("/")
+	logFile 		= logDir + "errors.log"
 	cfg             settings
 )
 
@@ -37,6 +40,10 @@ type settings struct {
 
 // absolutePath is your cfg.toml file
 func setup(absolutePath string) *player {
+	os.Mkdir(logDir, os.ModePerm)
+	logs, _ := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	log.SetOutput(logs)
+
 	player := &player{
 		[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
 		0, 0,
