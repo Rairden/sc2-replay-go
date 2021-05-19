@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"math"
 	"os"
 )
@@ -23,21 +22,17 @@ func (p *player) getReplayMMR(g game) (int64, error) {
 		}
 	}
 
-	files, _ := os.ReadDir(cfg.dir)
-
 	if MMR > 0 {
-		if len(files) == 1 {
-			p.startMMR = MMR
-		}
 		p.MMR = MMR
 		return MMR, nil
 	}
+
 	p.MMR = 0
 	return 0, errors.New("could not find MMR from replay")
 }
 
 // setStartMMR returns 0 if the data is invalid (nil, 0, -36400) or vs the A.I.
-func (p *player) setStartMMR(files []fs.FileInfo) int64 {
+func (p *player) setStartMMR(files []os.DirEntry) int64 {
 	files = sortFilesModTime(files)
 
 	for _, file := range files {
@@ -62,11 +57,9 @@ func writeData(fullPath, data string) {
 	file.Sync()
 }
 
-func (p *player) writeMMRdiff(start, end int64) {
-	files, _ := os.ReadDir(cfg.dir)
-
+func (p *player) writeMMRdiff(start, end int64, fileCnt ...int) {
 	if !cfg.useAPI {
-		if p.startMMR == 0 || numFiles(files) == 1 {
+		if p.startMMR == 0 || fileCnt[0] == 1 {
 			writeData(mmrDiffTxt, "+0 MMR\n")
 			return
 		}
@@ -82,9 +75,10 @@ func (p *player) writeMMRdiff(start, end int64) {
 			result = fmt.Sprintf("-%d MMR\n", diff)
 		}
 		writeData(mmrDiffTxt, result)
-	} else {
-		writeData(mmrDiffTxt, "+0 MMR\n")
+		return
 	}
+
+	writeData(mmrDiffTxt, "+0 MMR\n")
 }
 
 func (p *player) writeWinRate() {

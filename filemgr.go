@@ -62,6 +62,8 @@ func setup(absolutePath string) *player {
 		clientID := config.Get("settings.clientID").(string)
 		clientSecret := config.Get("settings.clientSecret").(string)
 
+		dir = filepath.Clean(dir)
+		dir += filepath.Join("/")
 		updateTime = setUpdateTime(updateTime)
 
 		for i := range toons {
@@ -148,7 +150,12 @@ func setUpdateTime(t int64) int64 {
 	return t
 }
 
-var myToml = `#     name - Put a comma-separated list of your SC2 accounts like in the example (url, name, race).
+var myToml = `# Lines starting with a hashtag (#) are ignored.
+# The minimum configuration is 2 fields (name=, dir=)            for useAPI = false.
+# The minimum configuration is 3 fields (name=, dir=, mainToon=) for useAPI = true.
+#
+#            I play w/ 2 accounts. The ± MMR works, but the number wouldn't make sense to combine them.
+#     name - Put a comma-separated list of your SC2 accounts like in the example (url, name, race).
 # mainToon - Choose only one profileID to use (only used if useAPI = true).
 #      dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
 
@@ -161,10 +168,14 @@ name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "z
 mainToon = "1331332"
 
 [directory]
-dir = "/home/erik/scratch/replays/"
-# dir = "C:/Users/Erik/Downloads/reps/"
-# dir = "C:\\Users\\Erik\\Downloads\\reps\\"
+dir = "/home/erik/scratch/replays"
+# dir = "C:/Users/Erik/Downloads/reps"
+# dir = "C:\\Users\\Erik\\Downloads\\reps"
 
+#  updateTime - How often to check dir if a new .SC2Replay file is created. Time in milliseconds. Range of 100 to 10000.
+#      useAPI - Whether or not to get your MMR from the battlenet API (default: true).
+# OAuth2Creds - Do not change. Where to get OAuth2 credentials in order to use battlenet API.
+#    clientID - Optional. Fill in ID/pass if you registered your own Client (best option).
 [settings]
 updateTime = 1000
 useAPI = true

@@ -4,11 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/icza/s2prot/rep"
-	"io/fs"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
@@ -32,19 +31,19 @@ type profile struct {
 }
 
 type user interface {
-	getMMR() (int64, error)
+	getMMR(files ...[]os.DirEntry) (int64, error)
 }
 
-func (p *player) getMMR() (int64, error) {
-	newestFile, err := getLastModified(cfg.dir)
+func (p *player) getMMR(files ...[]os.DirEntry) (int64, error) {
+	newestFile, err := getLastModified(files[0])
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 	lastGame := fileToGame(newestFile)
 	return p.getReplayMMR(lastGame)
 }
 
-func (p *player2) getMMR() (int64, error) {
+func (p *player2) getMMR(files ...[]os.DirEntry) (int64, error) {
 	return p.getMmrAPI(p.client)
 }
 
@@ -76,7 +75,7 @@ func main() {
 }
 
 func mainAPI(pl *player2) {
-	files, _ := ioutil.ReadDir(cfg.dir) // TODO: replace with os.ReadDir
+	files := getAllReplays(cfg.dir)
 
 	if cfg.clientID == "" {
 		err := getCredentials()
@@ -101,14 +100,18 @@ func mainAPI(pl *player2) {
 		pl.writeMMRdiff(pl.startMMR, pl.MMR)
 		pl.writeWinRate()
 	} else {
-		mmr, err := pl.getMmrAPI(client)
-		if err != nil {
-			redirectError(err)
-			mainNoAPI(&pl.player)
-		}
+		saveResetStats()
+	}
+
+	mmr, err := pl.getMmrAPI(client)
+	if err != nil {
+		redirectError(err)
+		mainNoAPI(&pl.player)
+	}
+
+	if pl.startMMR == 0 {
 		pl.startMMR = mmr
 		pl.MMR = mmr
-		saveResetStats()
 	}
 
 	pl.saveAllFiles()
@@ -116,15 +119,15 @@ func mainAPI(pl *player2) {
 }
 
 func mainNoAPI(pl *player) {
-	files, _ := ioutil.ReadDir(cfg.dir)
+	files := getAllReplays(cfg.dir)
 
 	// Allow user to start with a non-empty replay folder
 	if len(files) > 0 {
 		pl.setStartMMR(files)
 		pl.updateAllScores(files)
-		newestFile, _ := getLastModified(cfg.dir)
-		mmr, _ := pl.getReplayMMR(fileToGame(newestFile))
-		pl.writeMMRdiff(pl.startMMR, mmr)
+		newestGame := getLastModifiedGame(files)
+		mmr, _ := pl.getReplayMMR(newestGame)
+		pl.writeMMRdiff(pl.startMMR, mmr, len(files))
 		pl.writeWinRate()
 	} else {
 		saveResetStats()
@@ -135,32 +138,32 @@ func mainNoAPI(pl *player) {
 }
 
 func (p *player) run(usr user) {
-	files, _ := os.ReadDir(cfg.dir)
-	fileCnt := numFiles(files)
-	fmt.Printf("Start MMR: %11v\n", p.startMMR)
+	files := getAllReplays(cfg.dir)
+	fileCnt := len(files)
+	isFirstLoop := true
+	fmt.Printf("%12v %6v\n", "Start MMR:", p.startMMR)
 
 	for {
 		time.Sleep(time.Duration(cfg.updateTime) * time.Millisecond)
 
-		if nf := numFiles(files); nf <= fileCnt {
-			files, _ = os.ReadDir(cfg.dir)
-			fileCnt = nf
+		// ignore deleting files unless the number of files is 0
+		if len(files) <= fileCnt {
+			if !isFirstLoop && len(files) == 0 {
+				p.resetStats(usr, files)
+				isFirstLoop = true
+				fileCnt = len(files)
+				continue
+			}
+			files = getAllReplays(cfg.dir)
+			isFirstLoop = false
 			continue
 		}
 
-		fileCnt = numFiles(files)
+		isFirstLoop = false
+		fileCnt = len(files)
 
-		// If you don't want to restart program, you can just delete all replays from directory.
-		if fileCnt == 0 {
-			p.resetPlayer()
-			p.saveAllFiles()
-			saveResetStats()
-			p.startMMR, _ = usr.getMMR()
-			continue
-		}
-
-		game := p.updateScore()
-		if !game.isCompetitive {
+		game, err := p.updateScore(files)
+		if err != nil {
 			continue
 		}
 
@@ -168,39 +171,54 @@ func (p *player) run(usr user) {
 		p.setTotalWinLoss()
 		p.writeTotalWinLoss()
 		p.saveFile(game.matchup)
-		p.printResults(game)
 
 		if fileCnt == 1 || p.startMMR == 0 {
-			files, _ := ioutil.ReadDir(cfg.dir)
 			p.setStartMMR(files)
 		}
 
-		p.MMR, _ = usr.getMMR()
-		p.writeMMRdiff(p.startMMR, p.MMR)
+		p.MMR, _ = usr.getMMR(files)
+		p.writeMMRdiff(p.startMMR, p.MMR, len(files))
+		p.printResults(game)
 	}
 }
 
-func decodeReplay(file os.FileInfo) *rep.Rep {
+// If you don't want to restart program, you can just delete all replays from directory.
+func (p *player) resetStats(usr user, files []os.DirEntry) {
+	p.resetPlayer()
+	p.saveAllFiles()
+	saveResetStats()
+	p.startMMR, _ = usr.getMMR(files)
+}
+
+func getAllReplays(fullpath string) []os.DirEntry {
+	files, _ := os.ReadDir(fullpath)
+	var replays []os.DirEntry
+
+	for _, f := range files {
+		if !f.IsDir() && filepath.Ext(f.Name()) == ".SC2Replay" {
+			replays = append(replays, f)
+		}
+	}
+	return replays
+}
+
+func decodeReplay(file os.DirEntry) *rep.Rep {
 	r, err := rep.NewFromFileEvts(cfg.dir+file.Name(), false, false, false)
 	check(err)
 	defer r.Close()
 	return r
 }
 
-func fileToGame(file fs.FileInfo) game {
+func fileToGame(file os.DirEntry) game {
 	replay := decodeReplay(file)
 	return getGame(replay)
-}
-
-func getInitData(r *rep.Rep) *rep.InitData {
-	return &r.InitData
 }
 
 // toon has 4 fields. Three from rep.Details, and one from rep.InitData because the name is unreliable from Details.
 func getGame(r *rep.Rep) game {
 	Matchup := r.Details.Matchup()
 	players := r.Details.Players()
-	initData := getInitData(r)
+	initData := r.InitData
 	userInitDatas := initData.UserInitDatas
 
 	// Only InitData shows it's an A.I. (computer) match at 'x.InitData.Struct.gameDescription.gameOptions.competitive'
@@ -223,12 +241,17 @@ func getGame(r *rep.Rep) game {
 }
 
 func (p *player) printResults(g game) {
+	var you toon
+	var opponent toon
+
 	for _, pl := range g.players {
 		if _, ok := p.profile[pl.profileID]; ok {
-			fmt.Printf("%s %-11s %6v %s\n", g.matchup, pl.name, pl.mmr, pl.result)
-			return
+			you = pl
+		} else {
+			opponent = pl
 		}
 	}
+	fmt.Printf("%12v %6v %6v %-12v  %v %v\n", you.name, you.mmr, opponent.mmr, opponent.name, g.matchup, you.result)
 }
 
 func getMatchup(mu string) string {
@@ -251,7 +274,7 @@ func getWinner(g game) toon {
 	return g.players[1]
 }
 
-func (p *player) updateAllScores(files []os.FileInfo) {
+func (p *player) updateAllScores(files []os.DirEntry) {
 	for _, file := range files {
 		g := fileToGame(file)
 		if !g.isCompetitive {
@@ -264,15 +287,18 @@ func (p *player) updateAllScores(files []os.FileInfo) {
 	p.writeTotalWinLoss()
 }
 
-func (p *player) updateScore() game {
-	f, _ := getLastModified(cfg.dir)
+func (p *player) updateScore(files []os.DirEntry) (game, error) {
+	f, err := getLastModified(files)
+	if err != nil {
+		return game{}, err
+	}
 	g := fileToGame(f)
 	if !g.isCompetitive {
-		return g
+		return g, errors.New("replay is vs the A.I. (computer)")
 	}
 	winner := getWinner(g)
 	p.setScore(winner.profileID, g.matchup)
-	return g
+	return g, nil
 }
 
 // setScore The ID must be the winner.
@@ -298,10 +324,10 @@ func (p *player) incScore(ID string, ZvX *[2]uint8) {
 }
 
 func (p *player) resetPlayer() {
-	p.ZvP = [2]uint8{0, 0}
-	p.ZvT = [2]uint8{0, 0}
-	p.ZvZ = [2]uint8{0, 0}
-	p.total = [2]uint8{0, 0}
+	p.ZvP = [2]uint8{}
+	p.ZvT = [2]uint8{}
+	p.ZvZ = [2]uint8{}
+	p.total = [2]uint8{}
 	p.MMR, p.startMMR = 0, 0
 }
 
@@ -348,28 +374,44 @@ func scoreToString(ZvX *[2]uint8) string {
 }
 
 // Sort by modification time in ascending order
-func sortFilesModTime(files []fs.FileInfo) []os.FileInfo {
+func sortFilesModTime(files []os.DirEntry) []os.DirEntry {
 	sort.Slice(files, func(i, j int) bool {
-		return files[i].ModTime().Before(files[j].ModTime())
+		info, _ := files[i].Info()
+		info2, _ := files[j].Info()
+		return info.ModTime().Before(info2.ModTime())
 	})
 	return files
 }
 
-// using path is more expensive than a []fs.FileInfo param, but I need to refresh dir
-func getLastModified(path string) (os.FileInfo, error) {
-	files, _ := ioutil.ReadDir(path)
-	if len(files) == 0 {
-		return nil, errors.New("error: no files")
-	}
-
+// Sort by modification time in descending order
+func sortFilesModTimeDesc(files []os.DirEntry) []os.DirEntry {
 	sort.Slice(files, func(i, j int) bool {
-		return files[j].ModTime().Before(files[i].ModTime())
+		info, _ := files[i].Info()
+		info2, _ := files[j].Info()
+		return info2.ModTime().Before(info.ModTime())
 	})
+	return files
+}
+
+func getLastModified(files []os.DirEntry) (os.DirEntry, error) {
+	if len(files) == 0 {
+		return nil, errors.New("no files ending with .SC2Replay found")
+	}
+	files = sortFilesModTimeDesc(files)
 	return files[0], nil
 }
 
-func numFiles(files []os.DirEntry) int {
-	return len(files)
+func getLastModifiedGame(files []os.DirEntry) game {
+	files = sortFilesModTimeDesc(files)
+
+	for _, f := range files {
+		g := fileToGame(f)
+		if !g.isCompetitive {
+			continue
+		}
+		return g
+	}
+	return game{}
 }
 
 func check(e error) {
