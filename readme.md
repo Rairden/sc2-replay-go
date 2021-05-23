@@ -3,14 +3,12 @@
 Keep track of your basic game stats. Your win/loss record, win percentage, MMR gain/loss, and total win/loss for each gaming session.
 
 This tool creates 6 text files in your current working directory:
-* ZvP.txt
-* ZvT.txt
-* ZvZ.txt
+* xvp.txt
+* xvt.txt
+* xvz.txt
 * MMR-diff.txt
 * winrate.txt
 * totalWinLoss.txt
-
-It only works for zerg players, or 3 of the 6 matchups.
 
 ## useAPI
 
@@ -38,25 +36,25 @@ Place the .exe in any folder and run it. It will instantly close creating a temp
     - set race [^3]
 1. List all accounts you have for `name =`. [^4]
 1. Set `mainToon =`. Use your profileID (last number in URL).
-1. Set `dir =`. Use forward slash or double backslash for where your replays are saved.
+1. Set `dir =`. Where your replays are saved. For the path use a slash or backslash.
 1. Set `useAPI =` to true if you want the most accurate MMR calculator.
 
 You won't use this, but here is a minimum configuration cfg.toml file. Change 2 lines (name=, dir=).
 
 ```sh
 [account]
-name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ] ]
-mainToon = ""
+name = [ [ 'https://starcraft2.com/en-gb/profile/1/1/1331332', 'Gixxasaurus', 'zerg' ] ]
+mainToon = ''
 
 [directory]
-dir = "C:/Users/Erik/Downloads/reps"
+dir = 'C:\Users\Erik\reps'
 
 [settings]
 updateTime = 1000
 useAPI = false
-OAuth2Creds = ""
-clientID = ""
-clientSecret = ""
+OAuth2Creds = ''
+clientID = ''
+clientSecret = ''
 ```
 
 After you play SC2 or put a replay in your watch folder, the app will generate 6 .txt files you can use as overlays in something like OBS for streaming.
@@ -65,7 +63,7 @@ My OAuth2 credentials are used, but you could take 5 minutes to register your ow
 
 ## How it works
 
-The program only keeps track 1v1 ranked ladder. Replays are ignored if they are computer A.I. or 1v1 custom. Unranked replays behave identical to ranked replays (updates stats, but MMR should not change).
+The program only keeps track of 1v1 ranked ladder. Replays are ignored if they are computer A.I. or 1v1 custom. Unranked replays behave similar to ranked replays (updates your stats, but the MMR should not change).
 
 - all files not ending with .SC2Replay are ignored
 - subfolders are ignored
@@ -80,13 +78,13 @@ Say you play your first game and it ends. It shows you're +15 MMR now. You want 
 ```sh
 wc **/*.go | sort -k 1n
    31    84  1106 api/laddersummary/ladder-summary.go
-   52   143   994 sc2replay_test.go
    58   142  1820 api/ladder/ladder.go
-  115   346  2197 stats.go
+   58   159  1104 sc2replay_test.go
+  119   355  2270 stats.go
   161   537  4598 api.go
-  185   631  4859 filemgr.go
-  429  1115  8909 sc2replay.go
- 1031  2998 24483 total
+  184   604  4706 filemgr.go
+  458  1188  9593 sc2replay.go
+ 1069  3069 25197 total
  ```
 
 Make a plantuml from source code
@@ -95,7 +93,7 @@ Make a plantuml from source code
 goplantuml -recursive -show-aggregations -show-compositions -aggregate-private-members -show-implementations -show-connection-labels $GOPATH/src/sc2-replay-go > file.puml
 ```
 
-creates this UML [diagram](/resources/UML-sc2rep.png).
+creates this UML [diagram](resources/UML-sc2rep.png).
 
 [^1]: When you click "Score screen" or "Rewind" data is sent back to blizzard.  
 [^2]: The start of game MMR, not the end result MMR.  

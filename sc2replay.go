@@ -14,7 +14,7 @@ import (
 )
 
 type player struct {
-	ZvP, ZvT, ZvZ, total [2]uint8
+	xvp, xvt, xvz, total [2]uint8
 	startMMR, MMR        int64
 	profile              map[string]*profile
 }
@@ -57,6 +57,7 @@ type game struct {
 type toon struct {
 	profileID string
 	name      string
+	race      *rep.Race
 	mmr       int64
 	result    string
 }
@@ -120,6 +121,7 @@ func mainAPI(pl *player2) {
 
 func mainNoAPI(pl *player) {
 	files := getAllReplays(cfg.dir)
+	cfg.useAPI = false
 
 	// Allow user to start with a non-empty replay folder
 	if len(files) > 0 {
@@ -155,7 +157,9 @@ func (p *player) run(usr user) {
 				continue
 			}
 			files = getAllReplays(cfg.dir)
-			isFirstLoop = false
+			if len(files) <= fileCnt {
+				fileCnt = len(files)
+			}
 			continue
 		}
 
@@ -170,7 +174,7 @@ func (p *player) run(usr user) {
 		p.writeWinRate()
 		p.setTotalWinLoss()
 		p.writeTotalWinLoss()
-		p.saveFile(game.matchup)
+		p.saveFile(p.getOpponent(game).race.Name)
 
 		if fileCnt == 1 || p.startMMR == 0 {
 			p.setStartMMR(files)
@@ -178,7 +182,7 @@ func (p *player) run(usr user) {
 
 		p.MMR, _ = usr.getMMR(files)
 		p.writeMMRdiff(p.startMMR, p.MMR, len(files))
-		p.printResults(game)
+		p.printGame(game)
 	}
 }
 
@@ -216,7 +220,7 @@ func fileToGame(file os.DirEntry) game {
 
 // toon has 4 fields. Three from rep.Details, and one from rep.InitData because the name is unreliable from Details.
 func getGame(r *rep.Rep) game {
-	Matchup := r.Details.Matchup()
+	matchup := r.Details.Matchup()
 	players := r.Details.Players()
 	initData := r.InitData
 	userInitDatas := initData.UserInitDatas
@@ -224,47 +228,20 @@ func getGame(r *rep.Rep) game {
 	// Only InitData shows it's an A.I. (computer) match at 'x.InitData.Struct.gameDescription.gameOptions.competitive'
 	isCompetitive := initData.GameDescription.GameOptions.CompetitiveOrRanked()
 
-	mu := getMatchup(Matchup)
 	var toons []toon
 
 	for i := 0; i < 2; i++ {
 		p1 := toon{
 			strconv.FormatInt(players[i].Toon.ID(), 10),
 			userInitDatas[i].Name(),
+			players[i].Race(),
 			userInitDatas[i].MMR(),
 			players[i].Result().String(),
 		}
 		toons = append(toons, p1)
 	}
 
-	return game{toons, mu, isCompetitive}
-}
-
-func (p *player) printResults(g game) {
-	var you toon
-	var opponent toon
-
-	for _, pl := range g.players {
-		if _, ok := p.profile[pl.profileID]; ok {
-			you = pl
-		} else {
-			opponent = pl
-		}
-	}
-	fmt.Printf("%12v %6v %6v %-12v  %v %v\n", you.name, you.mmr, opponent.mmr, opponent.name, g.matchup, you.result)
-}
-
-func getMatchup(mu string) string {
-	switch mu {
-	case "ZvP", "PvZ":
-		return "ZvP"
-	case "ZvT", "TvZ":
-		return "ZvT"
-	case "ZvZ":
-		return "ZvZ"
-	default:
-		return ""
-	}
+	return game{toons, matchup, isCompetitive}
 }
 
 func getWinner(g game) toon {
@@ -274,6 +251,56 @@ func getWinner(g game) toon {
 	return g.players[1]
 }
 
+func (p *player) getOpponent(g game) toon {
+	toon := g.players[0]
+	if !p.isMyID(toon.profileID) {
+		return toon
+	}
+	return g.players[1]
+}
+
+func (p *player) printGame(g game) {
+	var you toon
+	var opponent toon
+
+	if _, ok := p.profile[g.players[0].profileID]; ok {
+		you = g.players[0]
+		opponent = g.players[1]
+	} else {
+		you = g.players[1]
+		opponent = g.players[0]
+	}
+
+	matchup := g.matchup
+	if you.profileID != "" {
+		matchup = fixMatchup(g.matchup, you.race.Letter)
+	}
+
+	fmt.Printf("%12v %6v %6v   %-12v  %v  %v\n",
+		you.name, you.mmr, opponent.mmr, opponent.name, matchup, you.result)
+}
+
+func (p *player) printAllGames() {
+	reps := getAllReplays(cfg.dir)
+
+	for _, r := range reps {
+		g := fileToGame(r)
+		p.printGame(g)
+	}
+}
+
+// fixMatchup returns a reversed string for the players' perspective.
+func fixMatchup(mu string, yourRace rune) string {
+	if rune(mu[0]) == yourRace {
+		return mu
+	}
+	matchup := []byte(mu)
+	sort.Slice(matchup, func(i, j int) bool {
+		return true
+	})
+	return string(matchup)
+}
+
 func (p *player) updateAllScores(files []os.DirEntry) {
 	for _, file := range files {
 		g := fileToGame(file)
@@ -281,7 +308,7 @@ func (p *player) updateAllScores(files []os.DirEntry) {
 			continue
 		}
 		winner := getWinner(g)
-		p.setScore(winner.profileID, g.matchup)
+		p.setScore(winner.profileID, p.getOpponent(g).race.Name)
 	}
 	p.setTotalWinLoss()
 	p.writeTotalWinLoss()
@@ -292,41 +319,43 @@ func (p *player) updateScore(files []os.DirEntry) (game, error) {
 	if err != nil {
 		return game{}, err
 	}
+
 	g := fileToGame(f)
 	if !g.isCompetitive {
 		return g, errors.New("replay is vs the A.I. (computer)")
 	}
+
 	winner := getWinner(g)
-	p.setScore(winner.profileID, g.matchup)
+	p.setScore(winner.profileID, p.getOpponent(g).race.Name)
 	return g, nil
 }
 
 // setScore The ID must be the winner.
-func (p *player) setScore(ID, matchup string) {
-	switch matchup {
-	case "ZvP":
-		p.incScore(ID, &p.ZvP)
-	case "ZvT":
-		p.incScore(ID, &p.ZvT)
-	case "ZvZ":
-		p.incScore(ID, &p.ZvZ)
+func (p *player) setScore(ID, opponentRace string) {
+	switch opponentRace {
+	case "Protoss":
+		p.incScore(ID, &p.xvp)
+	case "Terran":
+		p.incScore(ID, &p.xvt)
+	case "Zerg":
+		p.incScore(ID, &p.xvz)
 	}
 }
 
-func (p *player) incScore(ID string, ZvX *[2]uint8) {
+func (p *player) incScore(ID string, XvX *[2]uint8) {
 	isYou := p.isMyID(ID)
 
 	if isYou {
-		ZvX[0]++
+		XvX[0]++
 	} else {
-		ZvX[1]++
+		XvX[1]++
 	}
 }
 
 func (p *player) resetPlayer() {
-	p.ZvP = [2]uint8{}
-	p.ZvT = [2]uint8{}
-	p.ZvZ = [2]uint8{}
+	p.xvp = [2]uint8{}
+	p.xvt = [2]uint8{}
+	p.xvz = [2]uint8{}
 	p.total = [2]uint8{}
 	p.MMR, p.startMMR = 0, 0
 }
@@ -338,21 +367,21 @@ func (p *player) isMyID(ID string) bool {
 	return false
 }
 
-func (p *player) saveFile(matchup string) {
-	switch matchup {
-	case "ZvP":
-		writeFile(zvpTxt, &p.ZvP)
-	case "ZvT":
-		writeFile(zvtTxt, &p.ZvT)
-	case "ZvZ":
-		writeFile(zvzTxt, &p.ZvZ)
+func (p *player) saveFile(opponentRace string) {
+	switch opponentRace {
+	case "Protoss":
+		writeFile(xvpTxt, &p.xvp)
+	case "Terran":
+		writeFile(xvtTxt, &p.xvt)
+	case "Zerg":
+		writeFile(xvzTxt, &p.xvz)
 	}
 }
 
 func (p *player) saveAllFiles() {
-	writeFile(zvpTxt, &p.ZvP)
-	writeFile(zvtTxt, &p.ZvT)
-	writeFile(zvzTxt, &p.ZvZ)
+	writeFile(xvpTxt, &p.xvp)
+	writeFile(xvtTxt, &p.xvt)
+	writeFile(xvzTxt, &p.xvz)
 	writeFile(totalWinLossTxt, &p.total)
 }
 
@@ -366,9 +395,9 @@ func writeFile(fullPath string, mu *[2]uint8) {
 	writeData(fullPath, scoreToString(mu))
 }
 
-func scoreToString(ZvX *[2]uint8) string {
-	win := strconv.Itoa(int(ZvX[0]))
-	loss := strconv.Itoa(int(ZvX[1]))
+func scoreToString(XvX *[2]uint8) string {
+	win := strconv.Itoa(int(XvX[0]))
+	loss := strconv.Itoa(int(XvX[1]))
 	str := fmt.Sprintf("%2s - %s\n", win, loss)
 	return str
 }

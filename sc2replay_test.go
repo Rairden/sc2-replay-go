@@ -1,21 +1,27 @@
 package main
 
-import "testing"
+import (
+	"testing"
+)
 
 func Test_createMatchup(t *testing.T) {
+
 	tests := []struct {
-		input string
-		want  string
+		input   string
+		youRace rune
+		want    string
 	}{
-		{"PvZ", "ZvP"},
-		{"TvZ", "ZvT"},
-		{"ZvP", "ZvP"},
-		{"ZvT", "ZvT"},
-		{"ZvZ", "ZvZ"},
+		{"PvZ", 'Z', "ZvP"},
+		{"ZvP", 'P', "PvZ"},
+		{"ZvZ", 'Z', "ZvZ"},
+		{"PvT", 'P', "PvT"},
+		{"TvP", 'P', "PvT"},
+		{"TvZ", 'T', "TvZ"},
+		{"TvZ", 'Z', "ZvT"},
 	}
 
 	for _, test := range tests {
-		if matchup := getMatchup(test.input); matchup != test.want {
+		if matchup := fixMatchup(test.input, test.youRace); matchup != test.want {
 			t.Errorf("want: %v\n", test.want)
 			t.Errorf(" got: %v\n\n", matchup)
 		}

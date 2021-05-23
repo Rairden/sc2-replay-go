@@ -17,14 +17,14 @@ var (
 	s, _            = os.Executable()   // win10
 	currDir         = path.Dir(s) + filepath.Join("/")
 	cfgToml         = currDir + "cfg.toml"
-	zvpTxt          = currDir + "ZvP.txt"
-	zvtTxt          = currDir + "ZvT.txt"
-	zvzTxt          = currDir + "ZvZ.txt"
+	xvpTxt          = currDir + "xvp.txt"
+	xvtTxt          = currDir + "xvt.txt"
+	xvzTxt          = currDir + "xvz.txt"
 	mmrDiffTxt      = currDir + "MMR-diff.txt"
 	winrateTxt      = currDir + "winrate.txt"
 	totalWinLossTxt = currDir + "totalWinLoss.txt"
-	logDir	 		= currDir + "log" + filepath.Join("/")
-	logFile 		= logDir + "errors.log"
+	logDir          = currDir + "log" + filepath.Join("/")
+	logFile         = logDir + "errors.log"
 	cfg             settings
 )
 
@@ -45,7 +45,7 @@ func setup(absolutePath string) *player {
 	log.SetOutput(logs)
 
 	player := &player{
-		[2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0}, [2]uint8{0, 0},
+		[2]uint8{}, [2]uint8{}, [2]uint8{}, [2]uint8{},
 		0, 0,
 		make(map[string]*profile),
 	}
@@ -154,23 +154,22 @@ var myToml = `# Lines starting with a hashtag (#) are ignored.
 # The minimum configuration is 2 fields (name=, dir=)            for useAPI = false.
 # The minimum configuration is 3 fields (name=, dir=, mainToon=) for useAPI = true.
 #
-#            I play w/ 2 accounts. The ± MMR works, but the number wouldn't make sense to combine them.
 #     name - Put a comma-separated list of your SC2 accounts like in the example (url, name, race).
 # mainToon - Choose only one profileID to use (only used if useAPI = true).
-#      dir - Where to watch for new SC2 replays (use either a single slash, or a double backslash).
+#      dir - Where to watch for new SC2 replays (can use slash or backslash).
 
 [account]
-name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ] ]
+name = [ [ 'https://starcraft2.com/en-gb/profile/1/1/1331332', 'Gixxasaurus', 'zerg' ] ]
 
-# name = [ [ "https://starcraft2.com/en-gb/profile/1/1/1331332", "Gixxasaurus", "zerg" ],
-#          [ "https://starcraft2.com/en-gb/profile/2/1/4545534", "Rairden", "zerg" ] ]
+# name = [ [ 'https://starcraft2.com/en-gb/profile/1/1/1331332', 'Gixxasaurus', 'zerg' ],
+#          [ 'https://starcraft2.com/en-gb/profile/2/1/4545534', 'Rairden', 'zerg' ] ]
 
-mainToon = "1331332"
+mainToon = '1331332'
 
 [directory]
-dir = "/home/erik/scratch/replays"
-# dir = "C:/Users/Erik/Downloads/reps"
-# dir = "C:\\Users\\Erik\\Downloads\\reps"
+dir = '/home/erik/scratch/replays'
+# dir = 'E:\SC2\replayBackup'
+# dir = 'E:/SC2/replayBackup'
 
 #  updateTime - How often to check dir if a new .SC2Replay file is created. Time in milliseconds. Range of 100 to 10000.
 #      useAPI - Whether or not to get your MMR from the battlenet API (default: true).
@@ -179,7 +178,7 @@ dir = "/home/erik/scratch/replays"
 [settings]
 updateTime = 1000
 useAPI = true
-OAuth2Creds = "http://108.61.119.116"
-clientID = ""
-clientSecret = ""
+OAuth2Creds = 'http://108.61.119.116'
+clientID = ''
+clientSecret = ''
 `

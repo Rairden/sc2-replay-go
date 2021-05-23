@@ -82,6 +82,10 @@ func (p *player) writeMMRdiff(start, end int64, fileCnt ...int) {
 }
 
 func (p *player) writeWinRate() {
+	if p.getTotalGames() == 0 {
+		writeData(winrateTxt, "0%\n")
+		return
+	}
 	wr := float64(p.getWins()) / float64(p.getTotalGames()) * 100
 	winrate := fmt.Sprintf("%.f%%\n", math.Round(wr))
 	writeData(winrateTxt, winrate)
@@ -101,15 +105,15 @@ func (p *player) getTotalGames() uint8 {
 }
 
 func (p *player) getWins() uint8 {
-	x := p.ZvP[0]
-	y := p.ZvT[0]
-	z := p.ZvZ[0]
+	x := p.xvp[0]
+	y := p.xvt[0]
+	z := p.xvz[0]
 	return x + y + z
 }
 
 func (p *player) getLosses() uint8 {
-	x := p.ZvP[1]
-	y := p.ZvT[1]
-	z := p.ZvZ[1]
+	x := p.xvp[1]
+	y := p.xvt[1]
+	z := p.xvz[1]
 	return x + y + z
 }
