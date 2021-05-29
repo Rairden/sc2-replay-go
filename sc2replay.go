@@ -20,7 +20,7 @@ type player struct {
 }
 
 type player2 struct {
-	player
+	*player
 	client *http.Client
 }
 
@@ -64,7 +64,7 @@ type toon struct {
 
 func main() {
 	player := setup(cfgToml)
-	player2 := &player2{*player, nil}
+	player2 := &player2{player, nil}
 
 	fmt.Printf("Checking the directory '%v' \nevery %v ms for new SC2 replays...\n\n", cfg.dir, cfg.updateTime)
 
@@ -82,7 +82,7 @@ func mainAPI(pl *player2) {
 		err := getCredentials()
 		if err != nil {
 			redirectError(err)
-			mainNoAPI(&pl.player)
+			mainNoAPI(pl.player)
 		}
 	}
 
@@ -91,7 +91,7 @@ func mainAPI(pl *player2) {
 	err := pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
 	if err != nil {
 		redirectError(err)
-		mainNoAPI(&pl.player)
+		mainNoAPI(pl.player)
 	}
 
 	// Allow user to start with a non-empty replay folder
@@ -107,7 +107,7 @@ func mainAPI(pl *player2) {
 	mmr, err := pl.getMmrAPI(client)
 	if err != nil {
 		redirectError(err)
-		mainNoAPI(&pl.player)
+		mainNoAPI(pl.player)
 	}
 
 	if pl.startMMR == 0 {
@@ -176,7 +176,7 @@ func (p *player) run(usr user) {
 		p.writeTotalWinLoss()
 		p.saveFile(p.getOpponent(game).race.Name)
 
-		if fileCnt == 1 || p.startMMR == 0 {
+		if p.startMMR == 0 {
 			p.setStartMMR(files)
 		}
 
