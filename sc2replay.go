@@ -180,10 +180,38 @@ func (p *player) run(usr user) {
 			p.setStartMMR(files)
 		}
 
-		p.MMR, _ = usr.getMMR(files)
+		mmr, _ := usr.getMMR(files)
+
+		if p.MMR == mmr {
+			p.retryBattlenet(usr)
+		} else {
+			p.MMR = mmr
+		}
+
 		p.writeMMRdiff(p.startMMR, p.MMR, len(files))
 		p.printGame(game)
 	}
+}
+
+func (p *player) retryBattlenet(usr user) {
+	fmt.Println("p.MMR == mmr; battlenet hasn't updated a new MMR value yet.")
+	var mmr int64
+	var delay int64 = 3000
+
+	// try 3x, each separated by 3, 6, 12 seconds.
+	for i := 0; i < 3; i++ {
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+		mmr, _ = usr.getMMR()
+		if p.MMR == mmr {
+			delay *= 2
+		} else {
+			fmt.Printf("found new MMR value: %v\n", mmr)
+			p.MMR = mmr
+			return
+		}
+	}
+
+	fmt.Println("did not find a new MMR after trying 3x over 21 seconds.")
 }
 
 // If you don't want to restart program, you can just delete all replays from directory.
