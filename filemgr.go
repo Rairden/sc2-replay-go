@@ -72,6 +72,7 @@ func setup(absolutePath string) *player {
 			url := arr[0].(string)
 			name := arr[1].(string)
 			race := arr[2].(string)
+			race = strings.ToLower(race)
 
 			split := strings.Split(url, "/")
 

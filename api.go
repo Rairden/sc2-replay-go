@@ -17,16 +17,17 @@ type BattlenetError struct {
 	body       []byte
 	entries    []laddersummary.ShowCaseEntries
 	ranksPools []ladder.RanksAndPools
+	err        error
 }
 
 func (b *BattlenetError) Error() string {
-	return fmt.Sprintf("a battlenet error occured:\n" +
+	return fmt.Sprintf("%v\n" +
 		"\tStatus Code: %v\n" +
 		"\tContent-Length: %v\n" +
 		"\tLength of body: %v\n" +
 		"\tLength of ShowCaseEntries: %v\n" +
 		"\tLength of RanksAndPools: %v\n",
-		b.resp.StatusCode, b.resp.ContentLength, len(b.body), len(b.entries), len(b.ranksPools))
+		b.err, b.resp.StatusCode, b.resp.ContentLength, len(b.body), len(b.entries), len(b.ranksPools))
 }
 
 func getCredentials() error {
@@ -72,19 +73,17 @@ func getBattleNetClient(ID, secret string) *http.Client {
 	return client
 }
 
-// Set ladderID if not set
 func (p *player) setLadderID(client *http.Client) error {
 	pl := p.profile[cfg.mainToon]
-	if pl.ladderID == "" {
-		ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
-			pl.region, pl.regionID, pl.realmID, pl.profileID)
+	ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
+		pl.region, pl.regionID, pl.realmID, pl.profileID)
 
-		apiLadderID, err := getLadderSummary(client, ladderSummaryAPI, pl.race)
-		if err != nil {
-			return err
-		}
-		pl.ladderID = apiLadderID
+	apiLadderID, err := getLadderSummary(client, ladderSummaryAPI, pl.race)
+	if err != nil {
+		return err
 	}
+
+	pl.ladderID = apiLadderID
 	return nil
 }
 
@@ -97,9 +96,14 @@ func (p *player) getMmrAPI(client *http.Client) (int64, error) {
 		ladderAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/%s?locale=en_US",
 			pl.region, pl.regionID, pl.realmID, pl.profileID, pl.ladderID)
 
-		return getLadder(client, ladderAPI)
+		mmr, err := getLadder(client, ladderAPI)
+		if err != nil {
+			p.setLadderID(client)
+			return getLadder(client, ladderAPI)
+		}
+		return mmr, nil
 	}
-	return 0, errors.New("error: ladderID needs to be set first")
+	return 0, errors.New("ladderID needs to be set first")
 }
 
 func getLadder(client *http.Client, url string) (int64, error) {
@@ -118,7 +122,7 @@ func getLadder(client *http.Client, url string) (int64, error) {
 	json.Unmarshal(body, &lad)
 
 	if resp.StatusCode != 200 || len(body) == 0 || len(lad.RanksAndPools) == 0 {
-		return 0, &BattlenetError{resp, body, nil, lad.RanksAndPools}
+		return 0, &BattlenetError{resp, body, nil, lad.RanksAndPools, errors.New("error getting ladder")}
 	}
 
 	pools := lad.RanksAndPools[0]
@@ -144,8 +148,15 @@ func getLadderSummary(client *http.Client, url, race string) (string, error) {
 	json.Unmarshal(body, &ls)
 	entries := ls.ShowCaseEntries
 
-	if resp.StatusCode != 200 || len(body) == 0 || len(entries) == 0 {
-		return "", &BattlenetError{resp, body, entries, nil}
+	statusCode := resp.StatusCode
+
+	if statusCode != 200 || len(body) == 0 || len(entries) == 0 {
+		errMsg := fmt.Sprintf("error getting ladder summary. ")
+
+		if statusCode >= 500 {
+			errMsg += fmt.Sprintf("The blizzard API is down (%v). ", statusCode)
+		}
+		return "", &BattlenetError{resp, body, entries, nil, errors.New(errMsg)}
 	}
 
 	for _, e := range entries {
@@ -156,6 +167,6 @@ func getLadderSummary(client *http.Client, url, race string) (string, error) {
 			}
 		}
 	}
-	return "", errors.New("error: Could not find ladderID for that race. Make sure your cfg.toml file\n" +
+	return "", errors.New("could not find ladderID for that race. Make sure your cfg.toml file\n" +
 		"\thas the correct race for name= and mainToon=")
 }

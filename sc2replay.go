@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/icza/s2prot/rep"
 	"log"
@@ -66,7 +67,21 @@ func main() {
 	player := setup(cfgToml)
 	player2 := &player2{player, nil}
 
-	fmt.Printf("Checking the directory '%v' \nevery %v ms for new SC2 replays...\n\n", cfg.dir, cfg.updateTime)
+	replays := flag.String("print", cfg.dir, "Prints a summary of your replays.")
+	flag.Parse()
+
+	myFlag := flag.Lookup("print")
+
+	if isFlagPassed("print") {
+		if myFlag.Value.String() != "" {
+			player.printAllGames(*replays)
+		} else {
+			player.printAllGames(myFlag.DefValue)
+		}
+		os.Exit(0)
+	}
+
+	fmt.Printf("\nChecking the directory '%v' \nevery %v ms for new SC2 replays...\n\n", cfg.dir, cfg.updateTime)
 
 	if cfg.useAPI {
 		mainAPI(player2)
@@ -180,12 +195,18 @@ func (p *player) run(usr user) {
 			p.setStartMMR(files)
 		}
 
-		mmr, _ := usr.getMMR(files)
+		mmr, err := usr.getMMR(files)
+		if err != nil {
+			mmr = p.MMR
+			log.Println(err)
+		}
 
-		if p.MMR == mmr {
-			p.retryBattlenet(usr)
-		} else {
-			p.MMR = mmr
+		if cfg.useAPI {
+			if p.MMR == mmr {
+				p.retryBattlenet(usr)
+			} else {
+				p.MMR = mmr
+			}
 		}
 
 		p.writeMMRdiff(p.startMMR, p.MMR, len(files))
@@ -194,7 +215,6 @@ func (p *player) run(usr user) {
 }
 
 func (p *player) retryBattlenet(usr user) {
-	fmt.Println("p.MMR == mmr; battlenet hasn't updated a new MMR value yet.")
 	var mmr int64
 	var delay int64 = 3000
 
@@ -205,13 +225,10 @@ func (p *player) retryBattlenet(usr user) {
 		if p.MMR == mmr {
 			delay *= 2
 		} else {
-			fmt.Printf("found new MMR value: %v\n", mmr)
 			p.MMR = mmr
 			return
 		}
 	}
-
-	fmt.Println("did not find a new MMR after trying 3x over 21 seconds.")
 }
 
 // If you don't want to restart program, you can just delete all replays from directory.
@@ -234,7 +251,10 @@ func getAllReplays(fullpath string) []os.DirEntry {
 	return replays
 }
 
-func decodeReplay(file os.DirEntry) *rep.Rep {
+func decodeReplay(file os.DirEntry, dir ...string) *rep.Rep {
+	if len(dir) > 0 {
+		cfg.dir = dir[0]
+	}
 	r, err := rep.NewFromFileEvts(cfg.dir+file.Name(), false, false, false)
 	check(err)
 	defer r.Close()
@@ -308,11 +328,12 @@ func (p *player) printGame(g game) {
 		you.name, you.mmr, opponent.mmr, opponent.name, matchup, you.result)
 }
 
-func (p *player) printAllGames() {
-	reps := getAllReplays(cfg.dir)
+func (p *player) printAllGames(dir string) {
+	reps := getAllReplays(dir)
 
 	for _, r := range reps {
-		g := fileToGame(r)
+		replay := decodeReplay(r, dir)
+		g := getGame(replay)
 		p.printGame(g)
 	}
 }
@@ -329,10 +350,14 @@ func fixMatchup(mu string, yourRace rune) string {
 	return string(matchup)
 }
 
+func isTieOrServerCrashed(g game) bool {
+	return g.players[0].result == "Tie" || g.players[0].result == "Unknown"
+}
+
 func (p *player) updateAllScores(files []os.DirEntry) {
 	for _, file := range files {
 		g := fileToGame(file)
-		if !g.isCompetitive {
+		if !g.isCompetitive || isTieOrServerCrashed(g) {
 			continue
 		}
 		winner := getWinner(g)
@@ -351,6 +376,10 @@ func (p *player) updateScore(files []os.DirEntry) (game, error) {
 	g := fileToGame(f)
 	if !g.isCompetitive {
 		return g, errors.New("replay is vs the A.I. (computer)")
+	}
+
+	if isTieOrServerCrashed(g) {
+		return game{}, errors.New("the game was a tie or the bnet server crashed")
 	}
 
 	winner := getWinner(g)
@@ -478,9 +507,23 @@ func check(e error) {
 }
 
 func redirectError(err error) {
-	redirectErr := "Redirecting program to not pull MMR from battlenet API.\n" +
-		"MMR will be obtained from your local replay file now."
+	errorAPI := ""
+	get, ok := err.(*BattlenetError)
+	if ok {
+		errorAPI = fmt.Sprintf("The blizzard API is down (%v). ", get.resp.StatusCode)
+	}
+
+	redirectErr := fmt.Sprintf("%sMMR will be obtained from your local replay file now.\n", errorAPI)
 	fmt.Println(redirectErr)
-	fmt.Println()
 	log.Println(err)
+}
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }

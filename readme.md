@@ -81,10 +81,10 @@ wc **/*.go | sort -k 1n
    58   142  1820 api/ladder/ladder.go
    58   159  1104 sc2replay_test.go
   119   355  2270 stats.go
-  161   537  4598 api.go
-  184   604  4706 filemgr.go
-  458  1188  9593 sc2replay.go
- 1069  3069 25197 total
+  172   568  4877 api.go
+  185   607  4738 filemgr.go
+  529  1383 10953 sc2replay.go
+ 1152  3298 26868 total
  ```
 
 Make a plantuml from source code
