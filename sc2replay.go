@@ -41,7 +41,7 @@ func (p *player) getMMR(files ...[]os.DirEntry) (int64, error) {
 		return 0, err
 	}
 	lastGame := fileToGame(newestFile)
-	return p.getReplayMMR(lastGame)
+	return p.getReplayMMR(lastGame), nil
 }
 
 func (p *player2) getMMR(files ...[]os.DirEntry) (int64, error) {
@@ -113,13 +113,13 @@ func mainAPI(pl *player2) {
 	if len(files) > 0 {
 		pl.setStartMMR(files)
 		pl.updateAllScores(files)
-		pl.writeMMRdiff(pl.startMMR, pl.MMR)
 		pl.writeWinRate()
 	} else {
 		saveResetStats()
 	}
 
 	mmr, err := pl.getMmrAPI(client)
+	pl.writeMMRdiff(pl.startMMR, mmr)
 	if err != nil {
 		redirectError(err)
 		mainNoAPI(pl.player)
@@ -143,7 +143,7 @@ func mainNoAPI(pl *player) {
 		pl.setStartMMR(files)
 		pl.updateAllScores(files)
 		newestGame := getLastModifiedGame(files)
-		mmr, _ := pl.getReplayMMR(newestGame)
+		mmr := pl.getReplayMMR(newestGame)
 		pl.writeMMRdiff(pl.startMMR, mmr, len(files))
 		pl.writeWinRate()
 	} else {
@@ -197,8 +197,8 @@ func (p *player) run(usr user) {
 
 		mmr, err := usr.getMMR(files)
 		if err != nil {
-			mmr = p.MMR
-			log.Println(err)
+			redirectError(err)
+			mainNoAPI(p)
 		}
 
 		if cfg.useAPI {

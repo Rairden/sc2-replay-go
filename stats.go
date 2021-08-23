@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -9,11 +8,11 @@ import (
 
 // getReplayMMR sets the player MMR and returns the value. And returns 0 if you haven't
 // played in a long time, it's your first 2-3 placement matches, or an A.I. replay.
-func (p *player) getReplayMMR(g game) (int64, error) {
+func (p *player) getReplayMMR(g game) int64 {
 	var MMR int64
 
 	if !g.isCompetitive {
-		return 0, nil
+		return 0
 	}
 
 	for _, pl := range g.players {
@@ -24,11 +23,11 @@ func (p *player) getReplayMMR(g game) (int64, error) {
 
 	if MMR > 0 {
 		p.MMR = MMR
-		return MMR, nil
+		return MMR
 	}
 
 	p.MMR = 0
-	return 0, errors.New("could not find MMR from replay")
+	return 0
 }
 
 // setStartMMR returns 0 if the data is invalid (nil, 0, -36400) or vs the A.I.
@@ -37,7 +36,7 @@ func (p *player) setStartMMR(files []os.DirEntry) int64 {
 
 	for _, file := range files {
 		game := fileToGame(file)
-		MMR, _ := p.getReplayMMR(game)
+		MMR := p.getReplayMMR(game)
 
 		if MMR <= 0 || !game.isCompetitive {
 			continue

@@ -1,6 +1,6 @@
 ![overlay](resources/SC2-overlay.png)
 
-Keep track of your basic game stats. Your win/loss record, win percentage, MMR gain/loss, and total win/loss for each gaming session.
+Keep track of your basic game stats in Starcraft 2. Your win/loss record, win percentage, MMR gain/loss, and total win/loss for each gaming session.
 
 This tool creates 6 text files in your current working directory:
 * xvp.txt
@@ -80,11 +80,11 @@ wc **/*.go | sort -k 1n
    31    84  1106 api/laddersummary/ladder-summary.go
    58   142  1820 api/ladder/ladder.go
    58   159  1104 sc2replay_test.go
-  119   355  2270 stats.go
+  118   344  2192 stats.go
   172   568  4877 api.go
   185   607  4738 filemgr.go
-  529  1383 10953 sc2replay.go
- 1152  3298 26868 total
+  529  1381 10954 sc2replay.go
+ 1151  3285 26791 total
  ```
 
 Make a plantuml from source code
