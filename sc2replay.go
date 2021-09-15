@@ -103,7 +103,7 @@ func mainAPI(pl *player2) {
 
 	client := getBattleNetClient(cfg.clientID, cfg.clientSecret)
 	pl.client = client
-	err := pl.setLadderID(client) // 1) make request to ladder summary API. Get ladderID.
+	_, err := pl.setLadderID(client)
 	if err != nil {
 		redirectError(err)
 		mainNoAPI(pl.player)
@@ -197,11 +197,18 @@ func (p *player) run(usr user) {
 
 		mmr, err := usr.getMMR(files)
 		if err != nil {
-			redirectError(err)
-			mainNoAPI(p)
+			if _, ok := err.(*BattlenetError); ok {
+				redirectError(err)
+				mainNoAPI(p)
+			}
+			if err == ErrPromoted {
+				newestFile, _ := getLastModified(files)
+				lastGame := fileToGame(newestFile)
+				mmr = p.getReplayMMR(lastGame)
+			}
 		}
 
-		if cfg.useAPI {
+		if cfg.useAPI && err != ErrPromoted {
 			if p.MMR == mmr {
 				p.retryBattlenet(usr)
 			} else {

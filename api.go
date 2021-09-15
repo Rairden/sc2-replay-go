@@ -10,6 +10,12 @@ import (
 	"net/http"
 	"sc2-replay-go/api/ladder"
 	"sc2-replay-go/api/laddersummary"
+	"time"
+)
+
+var (
+	// ErrPromoted indicates you were promoted or demoted and your ladderID has changed.
+	ErrPromoted = errors.New("you were promoted or demoted")
 )
 
 type BattlenetError struct {
@@ -73,18 +79,18 @@ func getBattleNetClient(ID, secret string) *http.Client {
 	return client
 }
 
-func (p *player) setLadderID(client *http.Client) error {
+func (p *player) setLadderID(client *http.Client) (string, error) {
 	pl := p.profile[cfg.mainToon]
 	ladderSummaryAPI := fmt.Sprintf("https://%s.api.blizzard.com/sc2/profile/%s/%s/%s/ladder/summary?locale=en_US",
 		pl.region, pl.regionID, pl.realmID, pl.profileID)
 
 	apiLadderID, err := getLadderSummary(client, ladderSummaryAPI, pl.race)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	pl.ladderID = apiLadderID
-	return nil
+	return apiLadderID, nil
 }
 
 // getMmrAPI returns 0 if the data is invalid (nil, 0, -36400), status code != 200, or the body is empty.
@@ -97,11 +103,12 @@ func (p *player) getMmrAPI(client *http.Client) (int64, error) {
 			pl.region, pl.regionID, pl.realmID, pl.profileID, pl.ladderID)
 
 		mmr, err := getLadder(client, ladderAPI)
-		if err != nil {
+		if err == ErrPromoted {
+			time.Sleep(15000 * time.Millisecond)
 			p.setLadderID(client)
 			return getLadder(client, ladderAPI)
 		}
-		return mmr, nil
+		return mmr, err
 	}
 	return 0, errors.New("ladderID needs to be set first")
 }
@@ -121,8 +128,12 @@ func getLadder(client *http.Client, url string) (int64, error) {
 
 	json.Unmarshal(body, &lad)
 
-	if resp.StatusCode != 200 || len(body) == 0 || len(lad.RanksAndPools) == 0 {
+	if resp.StatusCode != 200 || len(body) == 0 {
 		return 0, &BattlenetError{resp, body, nil, lad.RanksAndPools, errors.New("error getting ladder")}
+	}
+
+	if len(lad.RanksAndPools) == 0 && len(lad.AllLadderMemberships) >= 1 {
+		return 0, ErrPromoted
 	}
 
 	pools := lad.RanksAndPools[0]
